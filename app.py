@@ -19,7 +19,6 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
-# 指定フォルダがなければ作成し、IDを返す
 def get_or_create_folder(folder_name, parent_id=None):
     print(f"フォルダ確認中: {folder_name}")
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
@@ -46,7 +45,6 @@ def get_or_create_folder(folder_name, parent_id=None):
         print(f"新規フォルダ作成: {folder_name} (ID: {folder['id']})")
         return folder['id']
 
-# 指定フォルダをユーザーと共有する
 def share_folder_with_user(folder_id, user_email):
     permission = {
         'type': 'user',
@@ -78,7 +76,9 @@ def webhook():
         headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
 
-        file_path = f'/tmp/{message_id}.jpg'
+        # ファイル名を日時形式に
+        timestamp_str = datetime.now().strftime('%Y%m%d%H%M%S')
+        file_path = f'/tmp/{timestamp_str}.jpg'
         with open(file_path, 'wb') as f:
             f.write(image_data)
 
@@ -90,9 +90,9 @@ def webhook():
         line_folder_id = get_or_create_folder('Line画像保存', parent_id=date_folder_id)
         get_or_create_folder('集計結果', parent_id=date_folder_id)
 
-        # 画像アップロード
+        # 画像アップロード（日時名で）
         file_metadata = {
-            'name': f'{message_id}.jpg',
+            'name': f'{timestamp_str}.jpg',
             'parents': [line_folder_id]
         }
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
