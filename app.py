@@ -5,6 +5,7 @@ from datetime import datetime
 import base64
 import pandas as pd
 from openai import OpenAI
+from openai._http_client import SyncHttpxClientWrapper
 import io
 
 from google.oauth2 import service_account
@@ -13,7 +14,12 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-client = OpenAI()
+
+# OpenAIクライアント（proxiesエラー対策）
+client = OpenAI(
+    api_key=os.environ.get("OPENAI_API_KEY"),
+    http_client=SyncHttpxClientWrapper()
+)
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
