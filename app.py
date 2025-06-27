@@ -13,7 +13,9 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
@@ -53,19 +55,18 @@ def extract_sender_info(display_name):
 def analyze_image_with_gpt(image_path, sender_name):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
-    now_str = datetime.now().strftime("%Y%m%d%H")
+    now = datetime.now()
+    now_str = now.strftime("%Y%m%d%H")
     prompt = f"""
 次の画像に含まれる内容を、以下のCSVフォーマットで構造化してください。
-出力形式はカンマ区切り1行のみで返してください（ヘッダー不要）。
-フォーマット（順番通り）:
+出力フォーマット（順番通りに、カンマ区切りで）:
 {','.join(CSV_HEADERS)}
-顧客: {extract_sender_info(sender_name)[0]}
-発注者: {extract_sender_info(sender_name)[1]}
-時間: {now_str}
-画像は以下です：
+顧客は「{extract_sender_info(sender_name)[0]}」
+発注者は「{extract_sender_info(sender_name)[1]}」
+時間は「{now_str}」
+以下が画像データです：
 """
-
-    response = openai.chat.completions.create(
+    response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": "あなたは画像の内容をCSV形式に構造化するアシスタントです。"},
@@ -77,23 +78,13 @@ def analyze_image_with_gpt(image_path, sender_name):
         max_tokens=1000,
         temperature=0
     )
-    structured = response.choices[0].message.content.strip()
-    print("=== GPT構造化結果 ===")
-    print(structured)
-    print("======================")
-    return structured
+    return response.choices[0].message.content.strip()
 
 def append_to_csv(structured_text, parent_id):
     today = datetime.now().strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
-
-    try:
-        new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
-    except Exception as e:
-        print(f"CSVパース失敗: {e}")
-        print("受け取ったデータ:\n", structured_text)
-        return
+    new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
 
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
@@ -113,13 +104,11 @@ def append_to_csv(structured_text, parent_id):
         combined.to_csv(file_path, index=False)
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().update(fileId=file_id, media_body=media).execute()
-        print(f"CSV追記完了（更新）: {filename}")
     else:
         new_data.to_csv(file_path, index=False)
         file_metadata = {'name': filename, 'parents': [parent_id]}
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
-        print(f"CSV新規作成: {filename}")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -150,7 +139,6 @@ def webhook():
         file_metadata = {'name': file_name, 'parents': [image_folder_id]}
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
-        print(f"Uploaded to Google Drive: {file_name}")
 
         structured_text = analyze_image_with_gpt(file_path, user_name)
         append_to_csv(structured_text, csv_folder_id)
