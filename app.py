@@ -5,7 +5,6 @@ from datetime import datetime
 import base64
 import pandas as pd
 from openai import OpenAI
-from openai._http_client import SyncHttpxClientWrapper
 import io
 
 from google.oauth2 import service_account
