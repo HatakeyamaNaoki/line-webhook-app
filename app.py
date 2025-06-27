@@ -19,6 +19,7 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
+# 指定フォルダがなければ作成し、IDを返す
 def get_or_create_folder(folder_name, parent_id=None):
     print(f"フォルダ確認中: {folder_name}")
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
@@ -45,6 +46,23 @@ def get_or_create_folder(folder_name, parent_id=None):
         print(f"新規フォルダ作成: {folder_name} (ID: {folder['id']})")
         return folder['id']
 
+# 指定フォルダをユーザーと共有する
+def share_folder_with_user(folder_id, user_email):
+    permission = {
+        'type': 'user',
+        'role': 'writer',
+        'emailAddress': user_email
+    }
+    try:
+        drive_service.permissions().create(
+            fileId=folder_id,
+            body=permission,
+            sendNotificationEmail=False
+        ).execute()
+        print(f"フォルダ '{folder_id}' を {user_email} と共有しました。")
+    except Exception as e:
+        print(f"共有エラー: {e}")
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
@@ -66,10 +84,11 @@ def webhook():
 
         # フォルダ階層作成
         root_folder_id = get_or_create_folder('受注集計')
+        share_folder_with_user(root_folder_id, 'hatake.hatake.hatake7@gmail.com')  # フォルダ共有
         today_str = datetime.now().strftime('%Y%m%d')
         date_folder_id = get_or_create_folder(today_str, parent_id=root_folder_id)
         line_folder_id = get_or_create_folder('Line画像保存', parent_id=date_folder_id)
-        get_or_create_folder('集計結果', parent_id=date_folder_id)  # 作るだけでOK
+        get_or_create_folder('集計結果', parent_id=date_folder_id)
 
         # 画像アップロード
         file_metadata = {
