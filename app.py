@@ -1,6 +1,7 @@
 from flask import Flask, request
 import requests
 import os
+from datetime import datetime
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -17,6 +18,30 @@ credentials = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES
 )
 drive_service = build('drive', 'v3', credentials=credentials)
+
+# フォルダを取得または作成
+def get_or_create_folder(name, parent_id=None):
+    query = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder'"
+    if parent_id:
+        query += f" and '{parent_id}' in parents"
+    results = drive_service.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id, name)',
+        pageSize=1
+    ).execute()
+    files = results.get('files', [])
+    if files:
+        return files[0]['id']
+    else:
+        file_metadata = {
+            'name': name,
+            'mimeType': 'application/vnd.google-apps.folder',
+        }
+        if parent_id:
+            file_metadata['parents'] = [parent_id]
+        folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+        return folder.get('id')
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -38,11 +63,17 @@ def webhook():
         with open(file_path, 'wb') as f:
             f.write(image_data)
 
+        # Google Drive フォルダ構成の作成
+        today_str = datetime.now().strftime('%Y%m%d')
+        root_folder = get_or_create_folder('受注集計')
+        today_folder = get_or_create_folder(today_str, parent_id=root_folder)
+        line_folder = get_or_create_folder('Line画像保存', parent_id=today_folder)
+        get_or_create_folder('集計結果', parent_id=today_folder)
+
         # Google Drive にアップロード
-        FOLDER_ID = '1pCUixzHNM4OfHGP86rbs1vtXBd8rqXD5'
         file_metadata = {
             'name': f'{message_id}.jpg',
-            'parents': [FOLDER_ID]
+            'parents': [line_folder]
         }
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
