@@ -39,7 +39,11 @@ def webhook():
             f.write(image_data)
 
         # Google Drive にアップロード
-        file_metadata = {'name': f'{message_id}.jpg'}
+        FOLDER_ID = '1pCUixzHNM4OfHGP86rbs1vtXBd8rqXD5'
+        file_metadata = {
+            'name': f'{message_id}.jpg',
+            'parents': [FOLDER_ID]
+        }
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
