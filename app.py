@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 import base64
 import pandas as pd
-import openai
+from openai import OpenAI
 import io
 
 from google.oauth2 import service_account
