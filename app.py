@@ -14,7 +14,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 
-# ✅ base_urlを明示的に指定してエラー回避
+# ✅ base_urlでOpenAIエラーを回避
 openai_client = OpenAI(
     base_url="https://api.openai.com/v1",
     api_key=os.environ["OPENAI_API_KEY"]
@@ -58,21 +58,31 @@ def extract_sender_info(display_name):
 def analyze_image_with_gpt(image_path, sender_name):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+
     now = datetime.now()
     now_str = now.strftime("%Y%m%d%H")
+    customer, requester = extract_sender_info(sender_name)
+
     prompt = f"""
-次の画像に含まれる内容を、以下のCSVフォーマットで構造化してください。
-出力フォーマット（順番通りに、カンマ区切りで）:
-{','.join(CSV_HEADERS)}
-顧客は「{extract_sender_info(sender_name)[0]}」
-発注者は「{extract_sender_info(sender_name)[1]}」
-時間は「{now_str}」
+以下の画像に含まれる注文内容を、CSV形式で構造化してください。
+- 出力はカンマ区切り、以下の順番と一致させてください。
+- 数量は数値＋単位に分けて記載してください（例：10, 玉）
+- 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
+- ヘッダーは出力せず、データ部分のみ複数行で出力してください。
+- 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
+
+列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,備考
+
+顧客: {customer}
+発注者: {requester}
+時間: {now_str}
 以下が画像データです：
 """
+
     response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "あなたは画像の内容をCSV形式に構造化するアシスタントです。"},
+            {"role": "system", "content": "あなたは画像の内容をCSV形式に変換するアシスタントです。"},
             {"role": "user", "content": [
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
@@ -81,7 +91,11 @@ def analyze_image_with_gpt(image_path, sender_name):
         max_tokens=1000,
         temperature=0
     )
-    return response.choices[0].message.content.strip()
+
+    content = response.choices[0].message.content.strip()
+    lines = content.splitlines()
+    cleaned_lines = [line for line in lines if not line.strip().startswith("この情報")]
+    return "\n".join(cleaned_lines)
 
 def append_to_csv(structured_text, parent_id):
     today = datetime.now().strftime('%Y%m%d')
@@ -150,4 +164,3 @@ def webhook():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-    
