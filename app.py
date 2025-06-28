@@ -14,11 +14,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 
-# OpenAIクライアント（proxiesエラー対策）
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-    http_client=SyncHttpxClientWrapper()
-)
+client = OpenAI()
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
