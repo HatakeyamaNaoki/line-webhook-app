@@ -61,6 +61,8 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
 以下の画像に含まれる注文内容を、CSV形式で構造化してください。
 - 出力はカンマ区切り、以下の順番と一致させてください。
 - 数量は数値＋単位に分けて記載してください（例：10, 玉）
+- 「玉レタス」「青ネギ」などのように、商品名が単位を含んでいるような言葉（実際には野菜名）の場合は、商品名として扱ってください。
+- 例えば「玉レタス1」は、「商品名：玉レタス」「数量：1」「単位：空白」として解釈してください。
 - 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
 - 何か注意点がある際にも備考欄に記載してください。
 - ヘッダーは出力せず、データ部分のみ複数行で出力してください。
@@ -72,10 +74,10 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
 - 現在日時（日本時間）: {now_verbose}（JST）
 - 社内担当者は常に「{operator_name}」としてください（画像から読み取らない）。
 - 読み取りができない場合でも、謝罪や案内文は出力せず、読み取れる範囲でデータのみを返してください。
+- 時間列には常に「{now_str}」を出力してください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
 
-時間: {now_str}
 以下が画像データです：
 """
 
@@ -129,7 +131,7 @@ def append_to_csv(structured_text, parent_id):
         return
 
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
-    new_data['時間'] = new_data['時間'].replace("不明", now_str).replace("指定なし", now_str)
+    new_data['時間'] = now_str
 
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
@@ -195,4 +197,3 @@ def webhook():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-
