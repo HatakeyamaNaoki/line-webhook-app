@@ -1,156 +1,152 @@
+from flask import Flask, request
+import requests
 import os
+from datetime import datetime
 import base64
-import datetime
+import pandas as pd
+from openai import OpenAI
 import io
-from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, ImageMessage
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from openai import OpenAI
-import pandas as pd
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
-# === 初期設定 ===
 app = Flask(__name__)
-line_bot_api = LineBotApi(os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
-handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 
-# === Google Drive 認証 ===
-SCOPES = ['https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = 'credentials.json'
-FOLDER_NAME = '受注集計'
+# ✅ base_urlを明示的に指定してエラー回避
+openai_client = OpenAI(
+    base_url="https://api.openai.com/v1",
+    api_key=os.environ["OPENAI_API_KEY"]
+)
 
-creds = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-drive_service = build('drive', 'v3', credentials=creds)
+SCOPES = ['https://www.googleapis.com/auth/drive.file']
+SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
 
-# === フォルダを探す or 作成 ===
+credentials = service_account.Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_FILE, scopes=SCOPES
+)
+drive_service = build('drive', 'v3', credentials=credentials)
+
+CSV_FORMAT_PATH = '集計フォーマット.csv'
+CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
+
 def get_or_create_folder(folder_name, parent_id=None):
-    query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
+    query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
-    results = drive_service.files().list(q=query, fields="files(id, name)").execute()
-    files = results.get('files', [])
+    else:
+        query += f" and 'root' in parents"
+    response = drive_service.files().list(q=query, fields='files(id, name)').execute()
+    files = response.get('files', [])
     if files:
         return files[0]['id']
-    file_metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-    }
+    file_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
     if parent_id:
         file_metadata['parents'] = [parent_id]
-    file = drive_service.files().create(body=file_metadata, fields='id').execute()
-    return file.get('id')
+    folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+    return folder['id']
 
-# === 画像アップロード ===
-def upload_image_to_drive(image_bytes, filename, folder_id):
-    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype='image/jpeg')
-    file_metadata = {
-        'name': filename,
-        'parents': [folder_id],
-    }
-    drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields='id'
-    ).execute()
+def extract_sender_info(display_name):
+    parts = display_name.strip().split()
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    elif parts:
+        return parts[0], ''
+    return '', ''
 
-# === 画像解析（GPT-4o） ===
-def extract_order_info_from_image(image_bytes):
-    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+def analyze_image_with_gpt(image_path, sender_name):
+    with open(image_path, "rb") as image_file:
+        image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
+    now = datetime.now()
+    now_str = now.strftime("%Y%m%d%H")
+    prompt = f"""
+次の画像に含まれる内容を、以下のCSVフォーマットで構造化してください。
+出力フォーマット（順番通りに、カンマ区切りで）:
+{','.join(CSV_HEADERS)}
+顧客は「{extract_sender_info(sender_name)[0]}」
+発注者は「{extract_sender_info(sender_name)[1]}」
+時間は「{now_str}」
+以下が画像データです：
+"""
     response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {
-                "role": "system",
-                "content": "以下の画像は手書き注文書です。CSV形式で構造化してください。項目は「顧客名, 青果名, 数量, 納期, 場所」でお願いします。"
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
-                    }
-                ]
-            }
+            {"role": "system", "content": "あなたは画像の内容をCSV形式に構造化するアシスタントです。"},
+            {"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ]}
         ],
-        temperature=0.2,
-        max_tokens=1024
+        max_tokens=1000,
+        temperature=0
     )
     return response.choices[0].message.content.strip()
 
-# === CSVをDriveに保存（追記） ===
-def append_csv_to_drive(csv_text, folder_id, date_str):
-    filename = f"{date_str}.csv"
-    results = drive_service.files().list(
-        q=f"name='{filename}' and '{folder_id}' in parents",
-        fields="files(id, name)").execute()
-    files = results.get('files', [])
-    
-    new_df = pd.read_csv(io.StringIO(csv_text))
-    
+def append_to_csv(structured_text, parent_id):
+    today = datetime.now().strftime('%Y%m%d')
+    filename = f'集計結果_{today}.csv'
+    file_path = f'/tmp/{filename}'
+    new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
+
+    query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
+    response = drive_service.files().list(q=query, fields='files(id)').execute()
+    files = response.get('files', [])
+
     if files:
         file_id = files[0]['id']
         request = drive_service.files().get_media(fileId=file_id)
-        file_data = request.execute()
-        existing_df = pd.read_csv(io.BytesIO(file_data))
-        combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+        existing = pd.read_csv(fh)
+        combined = pd.concat([existing, new_data], ignore_index=True)
+        combined.to_csv(file_path, index=False)
+        media = MediaFileUpload(file_path, mimetype='text/csv')
+        drive_service.files().update(fileId=file_id, media_body=media).execute()
     else:
-        combined_df = new_df
-
-    output = io.BytesIO()
-    combined_df.to_csv(output, index=False)
-    output.seek(0)
-
-    media = MediaIoBaseUpload(output, mimetype='text/csv')
-    file_metadata = {'name': filename, 'parents': [folder_id]}
-    
-    if files:
-        drive_service.files().update(fileId=files[0]['id'], media_body=media).execute()
-    else:
+        new_data.to_csv(file_path, index=False)
+        file_metadata = {'name': filename, 'parents': [parent_id]}
+        media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-# === LINEのWebhookエンドポイント ===
-@app.route("/callback", methods=['POST'])
-def callback():
-    signature = request.headers['X-Line-Signature']
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    events = data.get('events', [])
+    if not events:
+        return 'OK', 200
 
-# === LINEから画像受信時の処理 ===
-@handler.add(MessageEvent, message=ImageMessage)
-def handle_image_message(event):
-    message_content = line_bot_api.get_message_content(event.message.id)
-    image_data = b''.join(chunk for chunk in message_content.iter_content())
+    event = events[0]
+    if event.get('message', {}).get('type') == 'image':
+        message_id = event['message']['id']
+        user_name = event['source'].get('userId', '不明')
+        image_url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
+        headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
+        image_data = requests.get(image_url, headers=headers).content
 
-    now = datetime.datetime.now()
-    date_str = now.strftime("%Y%m%d")
-    time_str = now.strftime("%H%M%S")
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+        file_name = f'{timestamp}.jpg'
+        file_path = f'/tmp/{file_name}'
+        with open(file_path, 'wb') as f:
+            f.write(image_data)
 
-    base_folder_id = get_or_create_folder(FOLDER_NAME)
-    date_folder_id = get_or_create_folder(date_str, parent_id=base_folder_id)
-    image_folder_id = get_or_create_folder("Line画像保存", parent_id=date_folder_id)
-    csv_folder_id = get_or_create_folder("集計結果", parent_id=date_folder_id)
+        root_id = get_or_create_folder('受注集計')
+        date_id = get_or_create_folder(datetime.now().strftime('%Y%m%d'), parent_id=root_id)
+        image_folder_id = get_or_create_folder('Line画像保存', parent_id=date_id)
+        csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
 
-    image_filename = f"{date_str}_{time_str}.jpg"
-    upload_image_to_drive(image_data, image_filename, image_folder_id)
+        file_metadata = {'name': file_name, 'parents': [image_folder_id]}
+        media = MediaFileUpload(file_path, mimetype='image/jpeg')
+        drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-    extracted_csv = extract_order_info_from_image(image_data)
-    append_csv_to_drive(extracted_csv, csv_folder_id, date_str)
+        structured_text = analyze_image_with_gpt(file_path, user_name)
+        append_to_csv(structured_text, csv_folder_id)
 
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text="画像を受け取りました。内容をDriveに保存しました。")
-    )
+    return 'OK', 200
 
-# === アプリ起動 ===
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
