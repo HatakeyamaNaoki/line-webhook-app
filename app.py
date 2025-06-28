@@ -49,7 +49,7 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-def analyze_image_with_gpt(image_path):
+def analyze_image_with_gpt(image_path, max_retries=3):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
@@ -68,8 +68,10 @@ def analyze_image_with_gpt(image_path):
 - 顧客名と発注者名は画像上部のテキストから会社名と人名を抽出して出力してください。
 - "..." のような行や意味のない行は出力しないでください。
 - 納品希望日が「明日」「明後日」「3日後」など相対的な表現の場合は、以下の「現在日時（日本時間）」を基準に、「明日＝+1日」「明後日＝+2日」「3日後＝+3日」として正確に日付を加算し、YYYYMMDD形式で出力してください（※月またぎ・年またぎにも対応すること）。
+  特に「明後日」は+2日、「3日後」は+3日、「4日後」は+4日というふうに、語に対応する日数を厳密に解釈してください。
 - 現在日時（日本時間）: {now_verbose}（JST）
-- 社内担当者は、スクリーンショットを送信した人のLINEのユーザー名をそのまま出力してください。
+- 社内担当者は、LINEのユーザー名をそのまま出力してください。
+- 読み取りができない場合でも、謝罪や案内文は出力せず、読み取れる範囲でデータのみを返してください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
 
@@ -77,25 +79,33 @@ def analyze_image_with_gpt(image_path):
 以下が画像データです：
 """
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "あなたは画像の内容をCSV形式に変換するアシスタントです。"},
-            {"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-            ]}
-        ],
-        max_tokens=1000,
-        temperature=0
-    )
+    for attempt in range(max_retries):
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "あなたは画像の内容をCSV形式に変換するアシスタントです。"},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                ]}
+            ],
+            max_tokens=1000,
+            temperature=0.2
+        )
 
-    content = response.choices[0].message.content.strip()
-    lines = content.splitlines()
-    cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
-    return "\n".join(cleaned_lines)
+        content = response.choices[0].message.content.strip()
+        if "申し訳ありません" in content or "直接抽出することはできません" in content:
+            continue
+        lines = content.splitlines()
+        cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
+        return "\n".join(cleaned_lines)
+
+    return ""  # 全て失敗した場合
 
 def append_to_csv(structured_text, parent_id):
+    if not structured_text.strip():
+        return  # 無効なデータはスキップ
+
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
