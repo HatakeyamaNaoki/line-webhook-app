@@ -49,7 +49,7 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-def analyze_image_with_gpt(image_path, max_retries=3):
+def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
@@ -70,7 +70,7 @@ def analyze_image_with_gpt(image_path, max_retries=3):
 - 納品希望日が「明日」「明後日」「3日後」など相対的な表現の場合は、以下の「現在日時（日本時間）」を基準に、「明日＝+1日」「明後日＝+2日」「3日後＝+3日」として正確に日付を加算し、YYYYMMDD形式で出力してください（※月またぎ・年またぎにも対応すること）。
   特に「明後日」は+2日、「3日後」は+3日、「4日後」は+4日というふうに、語に対応する日数を厳密に解釈してください。
 - 現在日時（日本時間）: {now_verbose}（JST）
-- 社内担当者は、LINEのユーザー名をそのまま出力してください。
+- 社内担当者は常に「{operator_name}」としてください（画像から読み取らない）。
 - 読み取りができない場合でも、謝罪や案内文は出力せず、読み取れる範囲でデータのみを返してください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
@@ -111,6 +111,10 @@ def append_to_csv(structured_text, parent_id):
     file_path = f'/tmp/{filename}'
     new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
 
+    new_data = new_data[~new_data.iloc[:, 0].astype(str).str.contains("…|...|…")]  # 不要行削除
+    now_str = datetime.now(JST).strftime('%Y%m%d%H')
+    new_data['時間'] = new_data['時間'].replace("不明", now_str)  # 時間補完
+
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
     files = response.get('files', [])
@@ -149,6 +153,11 @@ def webhook():
         headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
 
+        # ユーザー名取得
+        user_id = event['source']['userId']
+        profile_res = requests.get('https://api.line.me/v2/bot/profile/' + user_id, headers=headers)
+        operator_name = profile_res.json().get('displayName', '不明')
+
         timestamp = datetime.now(JST)
         file_name = timestamp.strftime('%Y%m%d_%H%M') + '.jpg'
         file_path = f'/tmp/{file_name}'
@@ -164,7 +173,7 @@ def webhook():
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-        structured_text = analyze_image_with_gpt(file_path)
+        structured_text = analyze_image_with_gpt(file_path, operator_name)
         append_to_csv(structured_text, csv_folder_id)
 
     return 'OK', 200
