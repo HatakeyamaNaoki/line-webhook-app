@@ -94,17 +94,20 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
         )
 
         content = response.choices[0].message.content.strip()
+        print("GPT Response Content:\n", content)
+
         if "申し訳ありません" in content or "直接抽出することはできません" in content:
             continue
         lines = content.splitlines()
         cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
         return "\n".join(cleaned_lines)
 
-    return ""  # 全て失敗した場合
+    print("構造化テキストが空です。GPT応答なしまたはすべて謝罪文")
+    return ""
 
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
-        return  # 無効なデータはスキップ
+        return
 
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
@@ -116,9 +119,11 @@ def append_to_csv(structured_text, parent_id):
         print("CSV parsing error:", e)
         return
 
-    new_data = new_data[~new_data.iloc[:, 0].astype(str).str.contains("…|...|…")]  # 不要行削除
+    print("使用された構造化テキスト:\n", structured_text)
+
+    new_data = new_data[~new_data.iloc[:, 0].astype(str).str.contains("…|...|…")]
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
-    new_data['時間'] = new_data['時間'].replace("不明", now_str)  # 時間補完
+    new_data['時間'] = new_data['時間'].replace("不明", now_str)
 
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
@@ -158,7 +163,6 @@ def webhook():
         headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
 
-        # ユーザー名取得
         user_id = event['source']['userId']
         profile_res = requests.get('https://api.line.me/v2/bot/profile/' + user_id, headers=headers)
         operator_name = profile_res.json().get('displayName', '不明')
