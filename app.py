@@ -13,7 +13,6 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-
 client = OpenAI()
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
