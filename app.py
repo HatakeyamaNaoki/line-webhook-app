@@ -1,11 +1,12 @@
 from flask import Flask, request
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import pandas as pd
 from openai import OpenAI
 import io
+import pytz
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -30,6 +31,9 @@ drive_service = build('drive', 'v3', credentials=credentials)
 CSV_FORMAT_PATH = '集計フォーマット.csv'
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 
+JST = pytz.timezone('Asia/Tokyo')
+
+
 def get_or_create_folder(folder_name, parent_id=None):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
@@ -46,11 +50,12 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
+
 def analyze_image_with_gpt(image_path):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
-    now = datetime.now()
+    now = datetime.now(JST)
     now_str = now.strftime("%Y%m%d%H")
 
     prompt = f"""
@@ -62,6 +67,7 @@ def analyze_image_with_gpt(image_path):
 - 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
 - 顧客名と発注者名は画像上部のテキストから会社名と人名を抽出して出力してください。
 - "..." のような行や意味のない行は出力しないでください。
+- 納品希望日が「明日」「明後日」など相対的な表現の場合は、時間列の日時に基づいて計算してください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,備考
 
@@ -87,8 +93,9 @@ def analyze_image_with_gpt(image_path):
     cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
     return "\n".join(cleaned_lines)
 
+
 def append_to_csv(structured_text, parent_id):
-    today = datetime.now().strftime('%Y%m%d')
+    today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
     new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
@@ -117,6 +124,7 @@ def append_to_csv(structured_text, parent_id):
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
 
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
@@ -131,14 +139,14 @@ def webhook():
         headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
 
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-        file_name = f'{timestamp}.jpg'
+        timestamp = datetime.now(JST)
+        file_name = timestamp.strftime('%Y%m%d_%H%M') + '.jpg'
         file_path = f'/tmp/{file_name}'
         with open(file_path, 'wb') as f:
             f.write(image_data)
 
         root_id = get_or_create_folder('受注集計')
-        date_id = get_or_create_folder(datetime.now().strftime('%Y%m%d'), parent_id=root_id)
+        date_id = get_or_create_folder(timestamp.strftime('%Y%m%d'), parent_id=root_id)
         image_folder_id = get_or_create_folder('Line画像保存', parent_id=date_id)
         csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
 
@@ -150,6 +158,7 @@ def webhook():
         append_to_csv(structured_text, csv_folder_id)
 
     return 'OK', 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
