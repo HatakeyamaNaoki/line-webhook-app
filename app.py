@@ -1,4 +1,4 @@
-from flask import Flask, request
+""from flask import Flask, request
 import requests
 import os
 from datetime import datetime, timedelta
@@ -114,7 +114,7 @@ def append_to_csv(structured_text, parent_id):
     file_path = f'/tmp/{filename}'
 
     print("使用された構造化テキスト:\n", structured_text)
-    
+
     lines = structured_text.strip().splitlines()
     valid_lines = [line for line in lines if len(line.split(',')) == len(CSV_HEADERS)]
     if not valid_lines:
@@ -129,7 +129,7 @@ def append_to_csv(structured_text, parent_id):
         return
 
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
-    new_data['時間'] = new_data['時間'].replace("不明", now_str)
+    new_data['時間'] = new_data['時間'].replace("不明", now_str).replace("指定なし", now_str)
 
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
