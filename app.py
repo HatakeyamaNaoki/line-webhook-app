@@ -6,6 +6,11 @@ import base64
 import pandas as pd
 from openai import OpenAI
 import io
+from PIL import Image
+import pytesseract
+
+# Windows用：Tesseract実行ファイルのパスを指定（環境に合わせて変更）
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -14,7 +19,6 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 app = Flask(__name__)
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 
-# ✅ base_urlでOpenAIエラーを回避
 openai_client = OpenAI(
     base_url="https://api.openai.com/v1",
     api_key=os.environ["OPENAI_API_KEY"]
@@ -47,21 +51,24 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-def extract_sender_info(display_name):
-    parts = display_name.strip().split()
-    if len(parts) >= 2:
-        return parts[0], parts[1]
-    elif parts:
-        return parts[0], ''
-    return '', ''
+def extract_customer_and_requester(image_path):
+    image = Image.open(image_path)
+    top_crop = image.crop((0, 0, image.width, int(image.height * 0.15)))
+    ocr_text = pytesseract.image_to_string(top_crop, lang='jpn').strip()
+    if ' ' in ocr_text:
+        customer, requester = ocr_text.rsplit(' ', 1)
+    else:
+        customer, requester = ocr_text, ''
+    return customer, requester
 
-def analyze_image_with_gpt(image_path, sender_name):
+def analyze_image_with_gpt(image_path):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
     now = datetime.now()
     now_str = now.strftime("%Y%m%d%H")
-    customer, requester = extract_sender_info(sender_name)
+
+    customer, requester = extract_customer_and_requester(image_path)
 
     prompt = f"""
 以下の画像に含まれる注文内容を、CSV形式で構造化してください。
@@ -137,7 +144,6 @@ def webhook():
     event = events[0]
     if event.get('message', {}).get('type') == 'image':
         message_id = event['message']['id']
-        user_name = event['source'].get('userId', '不明')
         image_url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
         headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
@@ -157,7 +163,7 @@ def webhook():
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-        structured_text = analyze_image_with_gpt(file_path, user_name)
+        structured_text = analyze_image_with_gpt(file_path)
         append_to_csv(structured_text, csv_folder_id)
 
     return 'OK', 200
