@@ -113,15 +113,21 @@ def append_to_csv(structured_text, parent_id):
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
 
+    print("使用された構造化テキスト:\n", structured_text)
+    
+    lines = structured_text.strip().splitlines()
+    valid_lines = [line for line in lines if len(line.split(',')) == len(CSV_HEADERS)]
+    if not valid_lines:
+        print("⚠ 有効な行がありませんでした。構造化テキスト:\n", structured_text)
+        return
+    structured_text_cleaned = "\n".join(valid_lines)
+
     try:
-        new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
+        new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
     except Exception as e:
         print("CSV parsing error:", e)
         return
 
-    print("使用された構造化テキスト:\n", structured_text)
-
-    new_data = new_data[~new_data.iloc[:, 0].astype(str).str.contains("…|...|…")]
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = new_data['時間'].replace("不明", now_str)
 
