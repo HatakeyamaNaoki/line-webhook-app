@@ -33,7 +33,6 @@ CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 
 JST = pytz.timezone('Asia/Tokyo')
 
-
 def get_or_create_folder(folder_name, parent_id=None):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
@@ -50,7 +49,6 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-
 def analyze_image_with_gpt(image_path):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
@@ -64,14 +62,16 @@ def analyze_image_with_gpt(image_path):
 - 出力はカンマ区切り、以下の順番と一致させてください。
 - 数量は数値＋単位に分けて記載してください（例：10, 玉）
 - 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
+- 何か注意点がある際にも備考欄に記載してください。
 - ヘッダーは出力せず、データ部分のみ複数行で出力してください。
 - 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
 - 顧客名と発注者名は画像上部のテキストから会社名と人名を抽出して出力してください。
 - "..." のような行や意味のない行は出力しないでください。
 - 納品希望日が「明日」「明後日」「3日後」など相対的な表現の場合は、以下の「現在日時（日本時間）」を基準に、「明日＝+1日」「明後日＝+2日」「3日後＝+3日」として正確に日付を加算し、YYYYMMDD形式で出力してください。
 - 現在日時（日本時間）: {now_verbose}（JST）
+- 社内担当者は、LINEのユーザー名をそのまま出力してください。
 
-列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,備考
+列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
 
 時間: {now_str}
 以下が画像データです：
@@ -94,7 +94,6 @@ def analyze_image_with_gpt(image_path):
     lines = content.splitlines()
     cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
     return "\n".join(cleaned_lines)
-
 
 def append_to_csv(structured_text, parent_id):
     today = datetime.now(JST).strftime('%Y%m%d')
@@ -125,7 +124,6 @@ def append_to_csv(structured_text, parent_id):
         file_metadata = {'name': filename, 'parents': [parent_id]}
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
-
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -160,7 +158,6 @@ def webhook():
         append_to_csv(structured_text, csv_folder_id)
 
     return 'OK', 200
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
