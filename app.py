@@ -6,11 +6,6 @@ import base64
 import pandas as pd
 from openai import OpenAI
 import io
-from PIL import Image
-import pytesseract
-
-# Windows用：Tesseract実行ファイルのパスを指定（環境に合わせて変更）
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -51,24 +46,12 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-def extract_customer_and_requester(image_path):
-    image = Image.open(image_path)
-    top_crop = image.crop((0, 0, image.width, int(image.height * 0.15)))
-    ocr_text = pytesseract.image_to_string(top_crop, lang='jpn').strip()
-    if ' ' in ocr_text:
-        customer, requester = ocr_text.rsplit(' ', 1)
-    else:
-        customer, requester = ocr_text, ''
-    return customer, requester
-
 def analyze_image_with_gpt(image_path):
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode("utf-8")
 
     now = datetime.now()
     now_str = now.strftime("%Y%m%d%H")
-
-    customer, requester = extract_customer_and_requester(image_path)
 
     prompt = f"""
 以下の画像に含まれる注文内容を、CSV形式で構造化してください。
@@ -77,11 +60,10 @@ def analyze_image_with_gpt(image_path):
 - 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
 - ヘッダーは出力せず、データ部分のみ複数行で出力してください。
 - 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
+- 顧客名と発注者名は画像上部から抽出してください。なければ「未検出」と記載してください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,備考
 
-顧客: {customer}
-発注者: {requester}
 時間: {now_str}
 以下が画像データです：
 """
