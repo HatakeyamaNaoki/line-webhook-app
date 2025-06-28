@@ -60,7 +60,8 @@ def analyze_image_with_gpt(image_path):
 - 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
 - ヘッダーは出力せず、データ部分のみ複数行で出力してください。
 - 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
-- 顧客名と発注者名は画像上部から抽出してください。なければ「未検出」と記載してください。
+- 顧客名と発注者名は画像上部のテキストから会社名と人名を抽出して出力してください。
+- "..." のような行や意味のない行は出力しないでください。
 
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,備考
 
@@ -83,7 +84,7 @@ def analyze_image_with_gpt(image_path):
 
     content = response.choices[0].message.content.strip()
     lines = content.splitlines()
-    cleaned_lines = [line for line in lines if not line.strip().startswith("この情報")]
+    cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
     return "\n".join(cleaned_lines)
 
 def append_to_csv(structured_text, parent_id):
@@ -107,11 +108,11 @@ def append_to_csv(structured_text, parent_id):
         fh.seek(0)
         existing = pd.read_csv(fh)
         combined = pd.concat([existing, new_data], ignore_index=True)
-        combined.to_csv(file_path, index=False)
+        combined.to_csv(file_path, index=False, encoding='utf-8-sig')
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().update(fileId=file_id, media_body=media).execute()
     else:
-        new_data.to_csv(file_path, index=False)
+        new_data.to_csv(file_path, index=False, encoding='utf-8-sig')
         file_metadata = {'name': filename, 'parents': [parent_id]}
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
