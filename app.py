@@ -97,7 +97,7 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
         if "申し訳ありません" in content or "直接抽出することはできません" in content:
             continue
         lines = content.splitlines()
-        cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..."]
+        cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
         return "\n".join(cleaned_lines)
 
     return ""  # 全て失敗した場合
@@ -109,7 +109,12 @@ def append_to_csv(structured_text, parent_id):
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
-    new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
+
+    try:
+        new_data = pd.read_csv(io.StringIO(structured_text), header=None, names=CSV_HEADERS)
+    except Exception as e:
+        print("CSV parsing error:", e)
+        return
 
     new_data = new_data[~new_data.iloc[:, 0].astype(str).str.contains("…|...|…")]  # 不要行削除
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
