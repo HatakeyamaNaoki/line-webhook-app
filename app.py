@@ -79,7 +79,7 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
 列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
 
 以下が画像データです：
-"""
+    """
 
     for attempt in range(max_retries):
         response = openai_client.chat.completions.create(
@@ -94,49 +94,82 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
             max_tokens=1000,
             temperature=0.2
         )
-
         content = response.choices[0].message.content.strip()
-        print("GPT Response Content:\n", content)
-
         if "申し訳ありません" in content or "直接抽出することはできません" in content:
             continue
         lines = content.splitlines()
         cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
         return "\n".join(cleaned_lines)
+    return ""
 
-    print("構造化テキストが空です。GPT応答なしまたはすべて謝罪文")
+def analyze_text_with_gpt(text, operator_name, max_retries=3):
+    now = datetime.now(JST)
+    now_str = now.strftime("%Y%m%d%H")
+    now_verbose = now.strftime("%Y年%m月%d日 %H時")
+
+    prompt = f"""
+以下の注文内容（テキスト）をCSV形式で構造化してください。
+- 出力はカンマ区切り、以下の順番と一致させてください。
+- 数量は数値＋単位に分けて記載してください（例：10, 玉）
+- 「玉レタス」「青ネギ」などのように、商品名が単位を含んでいるような言葉（実際には野菜名）の場合は、商品名として扱ってください。
+- 例えば「玉レタス1」は、「商品名：玉レタス」「数量：1」「単位：空白」として解釈してください。
+- 「小さい」「大きめ」などの形容詞は備考欄に記載してください。
+- 何か注意点がある際にも備考欄に記載してください。
+- ヘッダーは出力せず、データ部分のみ複数行で出力してください。
+- 不要な補足文（例：「この情報を参考にしてください」など）は出力しないでください。
+- 顧客名と発注者名は文頭のテキストから会社名と人名を抽出して出力してください。
+- "..." のような行や意味のない行は出力しないでください。
+- 納品希望日が「明日」「明後日」「3日後」など相対的な表現の場合は、以下の「現在日時（日本時間）」を基準に、「明日＝+1日」「明後日＝+2日」「3日後＝+3日」として正確に日付を加算し、YYYYMMDD形式で出力してください（※月またぎ・年またぎにも対応すること）。
+  特に「明後日」は+2日、「3日後」は+3日、「4日後」は+4日というふうに、語に対応する日数を厳密に解釈してください。
+- 現在日時（日本時間）: {now_verbose}（JST）
+- 社内担当者は常に「{operator_name}」としてください（画像から読み取らない）。
+- 読み取りができない場合でも、謝罪や案内文は出力せず、読み取れる範囲でデータのみを返してください。
+- 時間列には常に「{now_str}」を出力してください。
+
+列順: 顧客,発注者,商品名,数量,単位,納品希望日,納品場所,時間,社内担当者,備考
+
+テキスト注文内容:
+{text}
+    """
+    for attempt in range(max_retries):
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "あなたはテキスト注文をCSV形式に変換するアシスタントです。"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.2
+        )
+        content = response.choices[0].message.content.strip()
+        if "申し訳ありません" in content or "直接抽出することはできません" in content:
+            continue
+        lines = content.splitlines()
+        cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
+        return "\n".join(cleaned_lines)
     return ""
 
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
         return
-
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
-
-    print("使用された構造化テキスト:\n", structured_text)
-
     lines = structured_text.strip().splitlines()
     valid_lines = [line for line in lines if len(line.split(',')) == len(CSV_HEADERS)]
     if not valid_lines:
-        print("⚠ 有効な行がありませんでした。構造化テキスト:\n", structured_text)
         return
     structured_text_cleaned = "\n".join(valid_lines)
-
     try:
         new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
     except Exception as e:
         print("CSV parsing error:", e)
         return
-
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
-
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
     files = response.get('files', [])
-
     if files:
         file_id = files[0]['id']
         request = drive_service.files().get_media(fileId=file_id)
@@ -163,34 +196,49 @@ def webhook():
     events = data.get('events', [])
     if not events:
         return 'OK', 200
-
     event = events[0]
+
+    user_id = event['source']['userId']
+    headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
+    profile_res = requests.get('https://api.line.me/v2/bot/profile/' + user_id, headers=headers)
+    operator_name = profile_res.json().get('displayName', '不明')
+    timestamp = datetime.now(JST)
+
+    # ---- ここで type を判定 ----
     if event.get('message', {}).get('type') == 'image':
         message_id = event['message']['id']
         image_url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
-        headers = {'Authorization': f'Bearer {CHANNEL_ACCESS_TOKEN}'}
         image_data = requests.get(image_url, headers=headers).content
-
-        user_id = event['source']['userId']
-        profile_res = requests.get('https://api.line.me/v2/bot/profile/' + user_id, headers=headers)
-        operator_name = profile_res.json().get('displayName', '不明')
-
-        timestamp = datetime.now(JST)
         file_name = timestamp.strftime('%Y%m%d_%H%M') + '.jpg'
         file_path = f'/tmp/{file_name}'
         with open(file_path, 'wb') as f:
             f.write(image_data)
-
         root_id = get_or_create_folder('受注集計')
         date_id = get_or_create_folder(timestamp.strftime('%Y%m%d'), parent_id=root_id)
         image_folder_id = get_or_create_folder('Line画像保存', parent_id=date_id)
         csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
-
         file_metadata = {'name': file_name, 'parents': [image_folder_id]}
         media = MediaFileUpload(file_path, mimetype='image/jpeg')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
-
         structured_text = analyze_image_with_gpt(file_path, operator_name)
+        append_to_csv(structured_text, csv_folder_id)
+
+    elif event.get('message', {}).get('type') == 'text':
+        text = event['message']['text']
+        file_name = timestamp.strftime('%Y%m%d_%H%M') + '.txt'
+        root_id = get_or_create_folder('受注集計')
+        date_id = get_or_create_folder(timestamp.strftime('%Y%m%d'), parent_id=root_id)
+        image_folder_id = get_or_create_folder('Line画像保存', parent_id=date_id)
+        csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
+        file_path = f'/tmp/{file_name}'
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(text)
+        # Google Driveにテキストファイルとして保存
+        file_metadata = {'name': file_name, 'parents': [image_folder_id]}
+        media = MediaFileUpload(file_path, mimetype='text/plain')
+        drive_service.files().create(body=file_metadata, media_body=media).execute()
+        # 構造化
+        structured_text = analyze_text_with_gpt(text, operator_name)
         append_to_csv(structured_text, csv_folder_id)
 
     return 'OK', 200
