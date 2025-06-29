@@ -97,11 +97,13 @@ def analyze_image_with_gpt(image_path, operator_name, max_retries=3):
             temperature=0.2
         )
         content = response.choices[0].message.content.strip()
+        print("GPT Response Content:\n", content) # デバッグ用
         if "申し訳ありません" in content or "直接抽出することはできません" in content:
             continue
         lines = content.splitlines()
         cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
         return "\n".join(cleaned_lines)
+    print("構造化テキストが空です。GPT応答なしまたはすべて謝罪文")
     return ""
 
 def analyze_text_with_gpt(text, operator_name, max_retries=3):
@@ -135,6 +137,7 @@ def analyze_text_with_gpt(text, operator_name, max_retries=3):
 テキスト注文内容:
 {text}
     """
+
     for attempt in range(max_retries):
         response = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -146,28 +149,48 @@ def analyze_text_with_gpt(text, operator_name, max_retries=3):
             temperature=0.2
         )
         content = response.choices[0].message.content.strip()
+        print("GPT Response Content:\n", content) # デバッグ用
         if "申し訳ありません" in content or "直接抽出することはできません" in content:
             continue
         lines = content.splitlines()
         cleaned_lines = [line for line in lines if not line.strip().startswith("この情報") and line.strip() != "..." and line.strip() != "…"]
         return "\n".join(cleaned_lines)
+    print("構造化テキストが空です。GPT応答なしまたはすべて謝罪文")
     return ""
 
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
+        with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
+            f.write("No structured_text received!\n")
+        print("No structured_text received! ログを保存しました。")
         return
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
     lines = structured_text.strip().splitlines()
-    valid_lines = [line for line in lines if len(line.split(',')) == len(CSV_HEADERS)]
+    valid_lines = []
+    invalid_lines = []
+    for line in lines:
+        if len(line.split(',')) == len(CSV_HEADERS):
+            valid_lines.append(line)
+        else:
+            invalid_lines.append(line)
     if not valid_lines:
+        print("⚠ 有効な行がありません。全行ログ保存")
+        with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
+            f.write(structured_text)
         return
+    # invalid_linesも必要に応じて別ファイルで保存
+    if invalid_lines:
+        with open(f"/tmp/invalid_structured_{today}.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(invalid_lines))
     structured_text_cleaned = "\n".join(valid_lines)
     try:
         new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
     except Exception as e:
         print("CSV parsing error:", e)
+        with open(f"/tmp/csv_parse_error_{today}.txt", "w", encoding="utf-8") as f:
+            f.write(structured_text)
         return
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
@@ -208,7 +231,6 @@ def webhook():
     operator_name = profile_res.json().get('displayName', '不明')
     timestamp = datetime.now(JST)
 
-    # ---- ここで type を判定 ----
     if event.get('message', {}).get('type') == 'image':
         message_id = event['message']['id']
         image_url = f'https://api-data.line.me/v2/bot/message/{message_id}/content'
@@ -237,11 +259,9 @@ def webhook():
         file_path = f'/tmp/{file_name}'
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(text)
-        # Google Driveにテキストファイルとして保存
         file_metadata = {'name': file_name, 'parents': [image_folder_id]}
         media = MediaFileUpload(file_path, mimetype='text/plain')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
-        # 構造化
         structured_text = analyze_text_with_gpt(text, operator_name)
         append_to_csv(structured_text, csv_folder_id)
 
