@@ -37,6 +37,7 @@ def analyze_pdf_with_gpt(pdf_path, operator_name, now_str, now_verbose, openai_c
                 temperature=0.2
             )
             content = response.choices[0].message.content.strip()
+            print("GPT content:", content)
             if "申し訳ありません" in content or "直接抽出することはできません" in content:
                 continue
             lines = content.splitlines()
