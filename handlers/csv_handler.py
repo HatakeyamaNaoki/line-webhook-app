@@ -15,26 +15,39 @@ def append_to_csv(structured_text, parent_id):
             f.write("No structured_text received!\n")
         print("No structured_text received! ログを保存しました。")
         return
+
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.csv'
     file_path = f'/tmp/{filename}'
+
     lines = structured_text.strip().splitlines()
     valid_lines = []
     invalid_lines = []
+
     for line in lines:
-        if len(line.split(',')) == len(CSV_HEADERS):
-            valid_lines.append(line)
+        # デバッグ用
+        print("DEBUG line (repr):", repr(line))
+        # 前後のスペース除去してから判定
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+        cols = [c.strip() for c in line_stripped.split(',')]
+        if len(cols) == len(CSV_HEADERS):
+            valid_lines.append(",".join(cols))
         else:
             invalid_lines.append(line)
+
     if not valid_lines:
         print("structured_text (for debug):\n", structured_text)
         print("⚠ 有効な行がありません。全行ログ保存")
         with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
             f.write(structured_text)
         return
+
     if invalid_lines:
         with open(f"/tmp/invalid_structured_{today}.txt", "w", encoding="utf-8") as f:
             f.write("\n".join(invalid_lines))
+
     structured_text_cleaned = "\n".join(valid_lines)
     try:
         new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
@@ -43,8 +56,10 @@ def append_to_csv(structured_text, parent_id):
         with open(f"/tmp/csv_parse_error_{today}.txt", "w", encoding="utf-8") as f:
             f.write(structured_text)
         return
+
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
+
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
     files = response.get('files', [])
