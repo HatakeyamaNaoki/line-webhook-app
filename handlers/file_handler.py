@@ -2,7 +2,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from config import SERVICE_ACCOUNT_FILE, SCOPES
 from google.oauth2 import service_account
-
 import os
 
 credentials = service_account.Credentials.from_service_account_file(
@@ -27,26 +26,17 @@ def get_or_create_folder(folder_name, parent_id=None):
     return folder['id']
 
 def get_unique_filename(file_name, folder_id):
-    """指定フォルダ内で重複しないファイル名を取得（必要なら末尾に3桁連番を付与）"""
-    # まず完全一致の重複をチェック
-    query = f"name = '{file_name}' and '{folder_id}' in parents and trashed = false"
-    response = drive_service.files().list(q=query, fields='files(id)').execute()
-    if not response.get('files'):
-        return file_name  # 重複がなければ元の名前を使用
-
-    # 重複ありの場合、連番付きの名前を生成
+    """必ず_3桁連番（_001, _002...）でファイル名を返す"""
     base, ext = os.path.splitext(file_name)
     for i in range(1, 1000):
-        new_name = f"{base}{i:03d}{ext}"
+        new_name = f"{base}_{i:03d}{ext}"
         query = f"name = '{new_name}' and '{folder_id}' in parents and trashed = false"
         res = drive_service.files().list(q=query, fields='files(id)').execute()
         if not res.get('files'):
             return new_name
-    # 001〜999まで全て存在するケース（通常起こりません）
     raise Exception("Unique filename could not be determined (too many duplicates).")
 
 def save_image_to_drive(image_data, file_name, folder_id):
-    # ファイル名の重複を避けるためユニークな名前を取得
     unique_name = get_unique_filename(file_name, folder_id)
     file_path = f"/tmp/{unique_name}"
     with open(file_path, 'wb') as f:
