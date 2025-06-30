@@ -2,10 +2,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from config import SERVICE_ACCOUNT_FILE, SCOPES
 from google.oauth2 import service_account
+
 import os
-import re
-from datetime import datetime
-import pytz
 
 credentials = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES
@@ -28,53 +26,52 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(body=file_metadata, fields='id').execute()
     return folder['id']
 
-def get_next_sequential_filename(folder_id, ext, date_prefix=None):
-    # 今日の日付をデフォルトで使う
-    if date_prefix is None:
-        JST = pytz.timezone('Asia/Tokyo')
-        date_prefix = datetime.now(JST).strftime('%Y%m%d')
-    pattern = re.compile(rf'^{date_prefix}_(\d{{3}})\.{ext}$')
-    response = drive_service.files().list(
-        q=f"'{folder_id}' in parents and trashed = false",
-        fields='files(name)').execute()
-    files = response.get('files', [])
-    numbers = []
-    for f in files:
-        m = pattern.match(f['name'])
-        if m:
-            numbers.append(int(m.group(1)))
-    next_number = max(numbers) + 1 if numbers else 1
-    return f"{date_prefix}_{next_number:03d}.{ext}"
+def get_unique_filename(file_name, folder_id):
+    """指定フォルダ内で重複しないファイル名を取得（必要なら末尾に3桁連番を付与）"""
+    # まず完全一致の重複をチェック
+    query = f"name = '{file_name}' and '{folder_id}' in parents and trashed = false"
+    response = drive_service.files().list(q=query, fields='files(id)').execute()
+    if not response.get('files'):
+        return file_name  # 重複がなければ元の名前を使用
 
-def save_image_to_drive(image_data, folder_id):
-    file_name = get_next_sequential_filename(folder_id, 'jpg')
-    file_path = f'/tmp/{file_name}'
+    # 重複ありの場合、連番付きの名前を生成
+    base, ext = os.path.splitext(file_name)
+    for i in range(1, 1000):
+        new_name = f"{base}{i:03d}{ext}"
+        query = f"name = '{new_name}' and '{folder_id}' in parents and trashed = false"
+        res = drive_service.files().list(q=query, fields='files(id)').execute()
+        if not res.get('files'):
+            return new_name
+    # 001〜999まで全て存在するケース（通常起こりません）
+    raise Exception("Unique filename could not be determined (too many duplicates).")
+
+def save_image_to_drive(image_data, file_name, folder_id):
+    # ファイル名の重複を避けるためユニークな名前を取得
+    unique_name = get_unique_filename(file_name, folder_id)
+    file_path = f"/tmp/{unique_name}"
     with open(file_path, 'wb') as f:
         f.write(image_data)
-    file_metadata = {'name': file_name, 'parents': [folder_id]}
+    file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='image/jpeg')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)
-    return file_name
 
-def save_text_to_drive(text, folder_id):
-    file_name = get_next_sequential_filename(folder_id, 'txt')
-    file_path = f'/tmp/{file_name}'
+def save_text_to_drive(text, file_name, folder_id):
+    unique_name = get_unique_filename(file_name, folder_id)
+    file_path = f"/tmp/{unique_name}"
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(text)
-    file_metadata = {'name': file_name, 'parents': [folder_id]}
+    file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='text/plain')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)
-    return file_name
 
-def save_pdf_to_drive(pdf_data, folder_id):
-    file_name = get_next_sequential_filename(folder_id, 'pdf')
-    file_path = f'/tmp/{file_name}'
+def save_pdf_to_drive(pdf_data, file_name, folder_id):
+    unique_name = get_unique_filename(file_name, folder_id)
+    file_path = f"/tmp/{unique_name}"
     with open(file_path, 'wb') as f:
         f.write(pdf_data)
-    file_metadata = {'name': file_name, 'parents': [folder_id]}
+    file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='application/pdf')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)
-    return file_name
