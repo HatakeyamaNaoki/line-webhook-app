@@ -60,7 +60,7 @@ def process_pdf_message(event):
     pdf_path = f'/tmp/{file_name}'
     with open(pdf_path, 'wb') as f:
         f.write(pdf_data)
-    save_image_to_drive(pdf_data, file_name, pdf_folder_id)  # PDFバイナリ保存
+    save_pdf_to_drive(pdf_data, file_name, pdf_folder_id)  # PDFバイナリ保存
 
     # PDF→テキスト（GPT解析）
     openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
