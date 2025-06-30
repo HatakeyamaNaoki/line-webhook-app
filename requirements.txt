@@ -10,3 +10,4 @@ google-auth-httplib2
 line-bot-sdk
 pytesseract
 Pillow
+pdf2image
