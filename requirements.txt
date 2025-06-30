@@ -12,3 +12,4 @@ pytesseract
 Pillow
 pdf2image
 openpyxl==3.1.2
+jaconv

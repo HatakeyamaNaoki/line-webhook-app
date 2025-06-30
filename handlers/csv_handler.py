@@ -8,16 +8,39 @@ from datetime import datetime
 import unicodedata
 import os
 from openpyxl import Workbook
+import jaconv  # ★追加：ひらがな→カタカナ等で使います
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
-def normalize_name(text):
-    # カタカナ・ひらがな・漢字・大文字小文字の差を吸収
+# 商品名・単位・備考などカタカナ化
+def normalize_item_name(text):
     if pd.isnull(text):
         return ""
-    text = unicodedata.normalize("NFKC", str(text))
-    return text.lower()
+    text = str(text).strip()
+    # ひらがな→カタカナ
+    text = jaconv.hira2kata(text)
+    # 半角カナ→全角カナ
+    text = jaconv.h2z(text, kana=True, ascii=False, digit=False)
+    # 英字全角・半角大文字→カタカナへ代表変換（例：「ＴＯＭＡＴＯ」「TOMATO」→「トマト」）
+    lower = text.lower()
+    mapping = {
+        "トマト": ["トマト", "ＴＯＭＡＴＯ", "とまと", "tomato", "ＴＯＭＡＴＯ"],
+        "キュウリ": ["キュウリ", "胡瓜", "きゅうり", "ｷｭｳﾘ", "cucumber", "ＣＵＣＵＭＢＥＲ"],
+        "ナス": ["ナス", "なす", "茄子", "ｎａｓｕ", "nasu", "ＮＡＳＵ"],
+    }
+    for katakana, pats in mapping.items():
+        for pat in pats:
+            # 英字も全部小文字化して一致判定
+            if lower == pat.lower():
+                return katakana
+    return text
+
+# サイズ正規化（全角→半角、小文字→大文字）
+def normalize_size(size):
+    if pd.isnull(size):
+        return ""
+    return jaconv.z2h(str(size), kana=False, ascii=True, digit=True).upper().strip()
 
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
@@ -92,7 +115,7 @@ def append_to_csv(structured_text, parent_id):
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
 
-    # ここでExcel出力＋サマリー
+    # Excel出力＋サマリー
     try:
         xlsx_path = csv_to_xlsx_with_summary(file_path)
         print(f"Excelファイル作成成功: {xlsx_path}")
@@ -104,33 +127,39 @@ def append_to_csv(structured_text, parent_id):
         print("Excelファイル作成エラー:", e)
 
 def csv_to_xlsx_with_summary(csv_path):
-    # 1. CSVをDataFrameで読み込み
     df = pd.read_csv(csv_path, dtype=str).fillna("")
-    # 2. 数量カラムを数値に
     df['数量'] = pd.to_numeric(df['数量'], errors='coerce').fillna(0)
-    # 3. 集計キー（normalizeで吸収）
+
+    # --- ここで商品名・サイズなど正規化 ---
+    df['商品名正規化'] = df['商品名'].map(normalize_item_name)
+    df['サイズ正規化'] = df['サイズ'].map(normalize_size)
+    df['単位正規化'] = df['単位'].map(normalize_item_name)
+    df['備考正規化'] = df['備考'].map(normalize_item_name)
+    # 集計キー
     df['集計キー'] = (
-        df['商品名'].map(normalize_name) + '_' +
-        df['サイズ'].str.upper().str.strip() + '_' +
-        df['単位'].map(normalize_name) + '_' +
-        df['備考'].map(normalize_name)
+        df['商品名正規化'] + "_" +
+        df['サイズ正規化'] + "_" +
+        df['単位正規化'] + "_" +
+        df['備考正規化']
     )
-    # 4. サマリ用グループ化
+    # サマリ用グループ化
     summary = (
         df.groupby('集計キー', as_index=False)
         .agg({
-            '商品名': 'first',
-            'サイズ': lambda x: x.str.upper().str.strip().iloc[0],
-            '単位': 'first',
-            '備考': 'first',
-            '数量': 'sum'
+            '商品名正規化': 'first',
+            'サイズ正規化': 'first',
+            '数量': 'sum',
+            '単位正規化': 'first',
+            '備考正規化': 'first'
         })
     )
-    # 5. サマリ用に空欄列を追加（ヘッダーに合わせて）
+    # サマリ用に空欄列を追加（ヘッダーに合わせて）
     for col in ['顧客', '発注者', '納品希望日', '納品場所', '時間', '社内担当者']:
         summary[col] = ""
-    columns = ['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']
+    columns = ['顧客', '発注者', '商品名正規化', 'サイズ正規化', '数量', '単位正規化', '納品希望日', '納品場所', '時間', '社内担当者', '備考正規化']
     summary = summary[columns]
+    # 列名を正式名に
+    summary.columns = ['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']
     summary = summary.sort_values('商品名')
 
     # 6. XLSX保存
@@ -138,13 +167,13 @@ def csv_to_xlsx_with_summary(csv_path):
     wb = Workbook()
     ws_raw = wb.active
     ws_raw.title = os.path.splitext(os.path.basename(csv_path))[0]
-    # RAW: 1シート目
+    # 1シート目（生データ）
     ws_raw.append(CSV_HEADERS)
     for row in df[CSV_HEADERS].itertuples(index=False, name=None):
         ws_raw.append(row)
-    # サマリ: 2シート目
+    # 2シート目（サマリ）
     ws_summary = wb.create_sheet("集計結果サマリ")
-    ws_summary.append(columns)
+    ws_summary.append(summary.columns)
     for row in summary.itertuples(index=False, name=None):
         ws_summary.append(row)
     wb.save(xlsx_path)
