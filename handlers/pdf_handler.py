@@ -57,13 +57,13 @@ def process_pdf_message(event):
     csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
 
     # PDF保存
-    pdf_path = f'/tmp/{file_name}'
-    with open(pdf_path, 'wb') as f:
-        f.write(pdf_data)
     save_pdf_to_drive(pdf_data, file_name, pdf_folder_id)  # PDFバイナリ保存
 
     # PDF→テキスト（GPT解析）
     openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    pdf_path = f'/tmp/{file_name}'
+    with open(pdf_path, 'wb') as f:
+        f.write(pdf_data)
     structured_text = analyze_pdf_with_gpt(
         pdf_path, operator_name, now_str, now_verbose, openai_client
     )
