@@ -27,6 +27,7 @@ def append_to_csv(structured_text, parent_id):
         else:
             invalid_lines.append(line)
     if not valid_lines:
+        print("GPT Response Content (TEXT):\n", content)
         print("⚠ 有効な行がありません。全行ログ保存")
         with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
             f.write(structured_text)
