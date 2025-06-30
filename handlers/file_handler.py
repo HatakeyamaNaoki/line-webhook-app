@@ -43,3 +43,12 @@ def save_text_to_drive(text, file_name, folder_id):
     media = MediaFileUpload(file_path, mimetype='text/plain')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)
+
+def save_pdf_to_drive(pdf_data, file_name, folder_id):
+    file_path = f'/tmp/{file_name}'
+    with open(file_path, 'wb') as f:
+        f.write(pdf_data)
+    file_metadata = {'name': file_name, 'parents': [folder_id]}
+    media = MediaFileUpload(file_path, mimetype='application/pdf')
+    drive_service.files().create(body=file_metadata, media_body=media).execute()
+    os.remove(file_path)
