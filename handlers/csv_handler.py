@@ -9,8 +9,6 @@ from datetime import datetime
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
-print("CSV_HEADERS:", CSV_HEADERS, "len:", len(CSV_HEADERS))
-
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
@@ -40,6 +38,7 @@ def append_to_csv(structured_text, parent_id):
             invalid_lines.append(line)
 
     if not valid_lines:
+        print("CSV_HEADERS:", CSV_HEADERS, "len:", len(CSV_HEADERS))
         print("structured_text (for debug):\n", structured_text)
         print("⚠ 有効な行がありません。全行ログ保存")
         with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
