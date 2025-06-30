@@ -173,7 +173,7 @@ def csv_to_xlsx_with_summary(csv_path):
         ws_raw.append(row)
     # 2シート目（サマリ）
     ws_summary = wb.create_sheet("集計結果サマリ")
-    ws_summary.append(summary.columns)
+    ws_summary.append(list(summary.columns))
     for row in summary.itertuples(index=False, name=None):
         ws_summary.append(row)
     wb.save(xlsx_path)
