@@ -4,7 +4,7 @@ import requests
 import base64
 from openai import OpenAI
 from handlers.prompt_templates import IMAGE_ORDER_PROMPT
-from handlers.file_handler import get_or_create_folder, save_image_to_drive
+from handlers.file_handler import get_or_create_folder, save_pdf_to_drive
 from handlers.csv_handler import append_to_csv
 from handlers.utils import get_now, get_operator_name
 
