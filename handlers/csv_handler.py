@@ -5,6 +5,10 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from config import CSV_FORMAT_PATH
 import pytz
 from datetime import datetime
+import unicodedata
+import os
+from openpyxl import Workbook, load_workbook
+
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
@@ -83,3 +87,60 @@ def append_to_csv(structured_text, parent_id):
         file_metadata = {'name': filename, 'parents': [parent_id]}
         media = MediaFileUpload(file_path, mimetype='text/csv')
         drive_service.files().create(body=file_metadata, media_body=media).execute()
+
+def normalize_name(text):
+    # カタカナ・ひらがな・漢字の差を吸収（NFKC正規化＋全角→半角）
+    if pd.isnull(text):
+        return ""
+    text = unicodedata.normalize("NFKC", str(text))
+    # 小文字・大文字を区別しない
+    return text.lower()
+
+def csv_to_xlsx_with_summary(csv_path):
+    # 1. CSVをDataFrameで読み込み
+    df = pd.read_csv(csv_path, dtype=str).fillna("")
+    # 2. 数量カラムを数値に（合計用）
+    df['数量'] = pd.to_numeric(df['数量'], errors='coerce').fillna(0)
+    # 3. 集計キー作成（商品名＋サイズ＋単位＋備考、同一商品対策でnormalize）
+    df['集計キー'] = (
+        df['商品名'].map(normalize_name) + '_' +
+        df['サイズ'].str.upper().str.strip() + '_' +
+        df['単位'].map(normalize_name) + '_' +
+        df['備考'].map(normalize_name)
+    )
+    # 4. サマリ用グループ化
+    summary = (
+        df.groupby('集計キー', as_index=False)
+        .agg({
+            '商品名': 'first',
+            'サイズ': lambda x: x.str.upper().str.strip().iloc[0],
+            '単位': 'first',
+            '備考': 'first',
+            '数量': 'sum'
+        })
+    )
+
+    # 5. サマリ用に空欄列を追加（ヘッダーに合わせて）
+    for col in ['顧客', '発注者', '納品希望日', '納品場所', '時間', '社内担当者']:
+        summary[col] = ""
+    # 列順
+    columns = ['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']
+    summary = summary[columns]
+    summary = summary.sort_values('商品名')
+
+    # 6. XLSX保存
+    xlsx_path = csv_path.replace('.csv', '.xlsx')
+    wb = Workbook()
+    ws_raw = wb.active
+    ws_raw.title = os.path.splitext(os.path.basename(csv_path))[0]
+    # RAW: 1シート目
+    for row in pd.read_csv(csv_path, dtype=str).fillna("").itertuples(index=False, name=None):
+        ws_raw.append(row)
+    # サマリ: 2シート目
+    ws_summary = wb.create_sheet("集計結果サマリ")
+    ws_summary.append(columns)
+    for row in summary.itertuples(index=False, name=None):
+        ws_summary.append(row)
+    wb.save(xlsx_path)
+    print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
+    return xlsx_path
