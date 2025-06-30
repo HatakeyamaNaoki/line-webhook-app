@@ -9,6 +9,8 @@ from datetime import datetime
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
+print("CSV_HEADERS:", CSV_HEADERS, "len:", len(CSV_HEADERS))
+
 def append_to_csv(structured_text, parent_id):
     if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
