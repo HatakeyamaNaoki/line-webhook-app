@@ -29,6 +29,7 @@ def handle_webhook(request):
             # ファイルが無い場合はエラー応答
             if not os.path.exists(csv_path):
                 # 必要に応じてLINE返信（未実装。LINE bot SDKで返信したい場合は追加）
+                print("デバッグ用")
                 print("集計ファイルが見つかりません")
 
             else:
