@@ -1,7 +1,7 @@
 from handlers.image_handler import process_image_message
 from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
-from handlers.csv_handler import csv_to_xlsx_with_summary  # サマリだけ生成用にimport
+from handlers.csv_handler import xlsx_with_summary_update  # サマリだけ生成用にimport
 from config import CSV_FORMAT_PATH
 
 import os
@@ -33,7 +33,7 @@ def handle_webhook(request):
 
             else:
                 # サマリのみ作成
-                xlsx_path = csv_to_xlsx_with_summary(csv_path)
+                xlsx_path = xlsx_with_summary_update(df, xlsx_path)
                 print(f"集計サマリ作成のみ実施: {xlsx_path}")
                 # 必要に応じてLINE返信で「サマリファイルをDrive等に保存した」旨伝える
             return 'OK', 200

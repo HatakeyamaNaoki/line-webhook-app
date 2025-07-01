@@ -18,7 +18,7 @@ def analyze_text_with_gpt(text, operator_name, now_str, now_verbose, openai_clie
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたはテキスト注文をCSV形式に変換するアシスタントです。"},
+                {"role": "system", "content": "あなたはテキスト注文をEXCEL形式に変換するアシスタントです。"},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=1000,

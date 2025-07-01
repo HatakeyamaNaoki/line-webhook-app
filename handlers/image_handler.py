@@ -20,7 +20,7 @@ def analyze_image_with_gpt(image_path, operator_name, now_str, now_verbose, open
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "あなたは画像の内容をCSV形式に変換するアシスタントです。"},
+                {"role": "system", "content": "あなたは画像の内容をEXCEL形式に変換するアシスタントです。"},
                 {"role": "user", "content": [
                     {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
