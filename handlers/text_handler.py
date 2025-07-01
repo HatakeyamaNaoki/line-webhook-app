@@ -58,4 +58,5 @@ def process_text_message(event):
     )
 
     # CSV追記
-    append_to_xlsx(structured_text, csv_folder_id)
+    openai_client = OpenAI()
+    append_to_xlsx(structured_text, csv_folder_id, openai_client)

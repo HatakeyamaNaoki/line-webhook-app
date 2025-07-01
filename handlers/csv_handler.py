@@ -9,38 +9,86 @@ import unicodedata
 import os
 from openpyxl import Workbook, load_workbook
 import jaconv  # ひらがな→カタカナ正規化用
+from openai import OpenAI  # 新しいOpenAIクライアント
+from prompt_templates import normalize_product_name_prompt
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
-# 商品名・単位・備考などカタカナ化
-def normalize_item_name(text):
-    if pd.isnull(text):
-        return ""
-    text = str(text).strip()
-    # ひらがな→カタカナ
-    text = jaconv.hira2kata(text)
-    # 半角カナ→全角カナ
-    text = jaconv.h2z(text, kana=True, ascii=False, digit=False)
-    lower = text.lower()
-    mapping = {
-        "トマト": ["トマト", "ＴＯＭＡＴＯ", "とまと", "tomato", "ＴＯＭＡＴＯ"],
-        "キュウリ": ["キュウリ", "胡瓜", "きゅうり", "ｷｭｳﾘ", "cucumber", "ＣＵＣＵＭＢＥＲ"],
-        "ナス": ["ナス", "なす", "茄子", "ｎａｓｕ", "nasu", "ＮＡＳＵ"],
-    }
-    for katakana, pats in mapping.items():
-        for pat in pats:
-            if lower == pat.lower():
-                return katakana
-    return text
+
+def normalize_product_name_ai(product_name, openai_client):
+    # 生成AIでカタカナ統一
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": normalize_product_name_prompt},
+            {"role": "user", "content": product_name}
+        ],
+        max_tokens=10,
+        temperature=0
+    )
+    return response.choices[0].message.content.strip()
 
 def normalize_size(size):
+    # 半角英数字・大文字化
     if pd.isnull(size):
         return ""
-    # 全角→半角、小文字→大文字
     return jaconv.z2h(str(size), kana=False, ascii=True, digit=True).upper().strip()
 
-def append_to_xlsx(structured_text, parent_id):
+def normalize_quantity(quantity):
+    # 半角数字のみ
+    if pd.isnull(quantity):
+        return ""
+    return jaconv.z2h(str(quantity), kana=False, ascii=False, digit=True).strip()
+
+def normalize_unit_ai(product_name, unit, quantity, openai_client):
+    from prompt_templates import normalize_unit_prompt
+    # AIに問い合わせ
+    content = f"商品名: {product_name}\n単位: {unit}\n数量: {quantity}"
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": normalize_unit_prompt},
+            {"role": "user", "content": content}
+        ],
+        max_tokens=10,
+        temperature=0
+    )
+    return response.choices[0].message.content.strip()
+
+def adjust_quantity_and_unit(quantity, unit):
+    # g系はkgに変換
+    if unit in ["g", "グラム", "ｇ"]:
+        try:
+            return float(quantity) / 1000, "kg"
+        except Exception:
+            return quantity, unit  # 変換できなければそのまま
+    elif unit in ["kg", "キログラム", "ＫＧ"]:
+        return quantity, "kg"
+    else:
+        return quantity, unit
+
+# 必要に応じてOpenAIクライアントをDI
+def normalize_row(row, openai_client):
+    # 商品名
+    product_name = normalize_product_name_ai(row['商品名'], openai_client)
+    # サイズ
+    size = normalize_size(row['サイズ'])
+    # 数量
+    quantity = normalize_quantity(row['数量'])
+    # 単位のAI正規化
+    norm_unit = normalize_unit_ai(product_name, row['単位'], quantity, openai_client)
+    # 数量・単位補正
+    adj_quantity, adj_unit = adjust_quantity_and_unit(quantity, norm_unit)
+    return {
+        "商品名": product_name,
+        "サイズ": size,
+        "数量": adj_quantity,
+        "単位": adj_unit,
+        # 他の項目はそのまま
+    }
+
+def append_to_xlsx(structured_text, parent_id, openai_client):
     """ 受け取った注文データを .xlsx で保存/追記しDriveに反映、サマリも作成 """
     if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
@@ -123,7 +171,7 @@ def append_to_xlsx(structured_text, parent_id):
         combined = new_data
 
     # サマリも含めたxlsxで保存＆Drive反映
-    xlsx_with_summary_update(combined, file_path)
+    xlsx_with_summary_update(combined, file_path, openai_client)
     try:
         # Driveへ新規 or update
         media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -136,47 +184,76 @@ def append_to_xlsx(structured_text, parent_id):
     except Exception as e:
         print("Excelファイル作成/アップロードエラー:", e)
 
-def xlsx_with_summary_update(df, xlsx_path):
-    """ 1シート目: 生データ, 2シート目: 商品名セット集計サマリ で.xlsx作成 """
-    # データ正規化
+def xlsx_with_summary_update(df, xlsx_path, openai_client):
+    """ 1シート目: 生データ, 2シート目: 商品名セット集計サマリ で.xlsx作成
+        ※openai_clientを引数で受け取る前提
+    """
     df = df.copy()
-    df['数量'] = pd.to_numeric(df['数量'], errors='coerce').fillna(0)
-    df['商品名正規化'] = df['商品名'].map(normalize_item_name)
-    df['サイズ正規化'] = df['サイズ'].map(normalize_size)
-    df['単位正規化'] = df['単位'].map(normalize_item_name)
-    df['備考正規化'] = df['備考'].map(normalize_item_name)
-    df['集計キー'] = (
-        df['商品名正規化'] + "_" +
-        df['サイズ正規化'] + "_" +
-        df['単位正規化'] + "_" +
-        df['備考正規化']
+    normalized_rows = []
+
+    # 各行を新しい正規化ロジックで変換
+    for _, row in df.iterrows():
+        # 商品名（AIカタカナ化）
+        product_name = normalize_product_name_ai(row['商品名'], openai_client)
+        # サイズ（半角英数字）
+        size = normalize_size(row['サイズ'])
+        # 数量（半角数字に）
+        quantity = normalize_quantity(row['数量'])
+        # 単位（AI＆ルール正規化）
+        norm_unit = normalize_unit_ai(product_name, row['単位'], quantity, openai_client)
+        # 数量＆単位補正
+        adj_quantity, adj_unit = adjust_quantity_and_unit(quantity, norm_unit)
+        # 他項目はそのまま
+        normalized_rows.append({
+            "顧客": row.get("顧客", ""),
+            "発注者": row.get("発注者", ""),
+            "商品名": product_name,
+            "サイズ": size,
+            "数量": adj_quantity,
+            "単位": adj_unit,
+            "納品希望日": row.get("納品希望日", ""),
+            "納品場所": row.get("納品場所", ""),
+            "時間": row.get("時間", ""),
+            "社内担当者": row.get("社内担当者", ""),
+            "備考": row.get("備考", "")  # 備考はそのまま
+        })
+
+    df_norm = pd.DataFrame(normalized_rows)
+
+    # 集計キーを商品名・サイズ・単位でまとめる（備考は使わない）
+    df_norm['集計キー'] = (
+        df_norm['商品名'].astype(str) + "_" +
+        df_norm['サイズ'].astype(str) + "_" +
+        df_norm['単位'].astype(str)
     )
 
-    # グループ化してサマリ生成
+    # サマリ生成（備考は集計キーやサマリ集約に使わない）
     summary = (
-        df.groupby('集計キー', as_index=False)
+        df_norm.groupby('集計キー', as_index=False)
         .agg({
-            '商品名正規化': 'first',
-            'サイズ正規化': 'first',
+            '顧客': 'first',
+            '発注者': 'first',
+            '商品名': 'first',
+            'サイズ': 'first',
             '数量': 'sum',
-            '単位正規化': 'first',
-            '備考正規化': 'first'
+            '単位': 'first',
+            '納品希望日': 'first',
+            '納品場所': 'first',
+            '時間': 'first',
+            '社内担当者': 'first',
+            '備考': 'first'
         })
     )
-    # サマリ用に空欄列を追加（ヘッダーに合わせて）
-    for col in ['顧客', '発注者', '納品希望日', '納品場所', '時間', '社内担当者']:
-        summary[col] = ""
-    columns = ['顧客', '発注者', '商品名正規化', 'サイズ正規化', '数量', '単位正規化', '納品希望日', '納品場所', '時間', '社内担当者', '備考正規化']
-    summary = summary[columns]
-    summary.columns = ['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']
+    # 並び順調整
+    summary = summary[['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']]
     summary = summary.sort_values('商品名')
 
     # xlsx出力
     wb = Workbook()
     ws_raw = wb.active
     ws_raw.title = os.path.splitext(os.path.basename(xlsx_path))[0]
-    ws_raw.append(CSV_HEADERS)
-    for row in df[CSV_HEADERS].itertuples(index=False, name=None):
+    ws_raw.append(list(df_norm.columns.drop('集計キー')))
+    for row in df_norm.drop(columns=['集計キー']).itertuples(index=False, name=None):
         ws_raw.append(row)
     ws_summary = wb.create_sheet("集計結果サマリ")
     ws_summary.append(list(summary.columns))

@@ -11,6 +11,7 @@ import pytz
 import pandas as pd
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
+from openai import OpenAI
 
 def handle_webhook(request):
     data = request.get_json()
@@ -64,8 +65,9 @@ def handle_webhook(request):
         # =====================
         if user_text == '集計サマリ作成':
             try:
+                openai_client = OpenAI()
                 df = pd.read_excel(file_path)
-                xlsx_with_summary_update(df, file_path)
+                xlsx_with_summary_update(df, file_path, openai_client)
                 print(f"集計サマリ作成のみ実施: {file_path}")
 
                 # 再アップロード

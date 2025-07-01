@@ -71,4 +71,5 @@ def process_image_message(event):
     os.remove(image_path)
 
     # 6. CSV追記
-    append_to_xlsx(structured_text, csv_folder_id)
+    openai_client = OpenAI()
+    append_to_xlsx(structured_text, csv_folder_id, openai_client)

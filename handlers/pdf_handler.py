@@ -82,4 +82,5 @@ def process_pdf_message(event):
     os.remove(pdf_path)
 
     # CSV追記
-    append_to_xlsx(structured_text, csv_folder_id)
+    openai_client = OpenAI()
+    append_to_xlsx(structured_text, csv_folder_id, openai_client)
