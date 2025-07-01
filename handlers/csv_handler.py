@@ -179,3 +179,15 @@ def csv_to_xlsx_with_summary(csv_path):
     wb.save(xlsx_path)
     print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
     return xlsx_path
+
+results = drive_service.files().list(
+    q="sharedWithMe = true and trashed = false",
+    fields="files(id, name, owners, parents)"
+).execute()
+files = results.get('files', [])
+if not files:
+    print("（sharedWithMe APIからも）ファイルが見つかりません")
+else:
+    print("（sharedWithMe APIから見えるファイル一覧）")
+    for f in files:
+        print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, 親フォルダ: {f.get('parents')}, オーナー: {f['owners'][0]['displayName']}")
