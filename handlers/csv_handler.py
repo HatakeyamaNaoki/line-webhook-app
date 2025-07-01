@@ -41,7 +41,6 @@ def normalize_size(size):
     return jaconv.z2h(str(size), kana=False, ascii=True, digit=True).upper().strip()
 
 def append_to_xlsx(structured_text, parent_id):
-    print("★ここを通過１", flush=True)
     """ 受け取った注文データを .xlsx で保存/追記しDriveに反映、サマリも作成 """
     if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
@@ -52,7 +51,6 @@ def append_to_xlsx(structured_text, parent_id):
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.xlsx'
     file_path = f'/tmp/{filename}'
-    print("★ここを通過２", flush=True)
 
     # 注文データをDataFrameに
     lines = structured_text.strip().splitlines()
@@ -64,7 +62,6 @@ def append_to_xlsx(structured_text, parent_id):
         cols = [c.strip() for c in line_stripped.split(',')]
         if len(cols) == len(CSV_HEADERS):
             valid_lines.append(",".join(cols))
-    print("★ここを通過３", flush=True)
 
     if not valid_lines:
         print("⚠ 有効な行がありません。全行ログ保存")
@@ -83,7 +80,6 @@ def append_to_xlsx(structured_text, parent_id):
 
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
-    print("★ここを通過４", flush=True)
 
     # デバッグ: Drive全体で見える同名ファイル一覧
     print("\n【デバッグ】Drive全体で見える同名ファイル一覧:")
@@ -95,7 +91,6 @@ def append_to_xlsx(structured_text, parent_id):
     all_files = all_results.get('files', [])
     for f in all_files:
         print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '-'}")
-    print("★ここを通過５", flush=True)
 
     # 既存のxlsxファイルがDriveにあれば取得してマージ
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
@@ -104,7 +99,7 @@ def append_to_xlsx(structured_text, parent_id):
     print(f"【デバッグ】指定親フォルダ {parent_id} で見つかったファイル数: {len(files)}")
     for f in files:
         print(f"【デバッグ】指定親: ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '?'}")
-    print("★ここを通過６", flush=True)
+
     # 追加: Drive全体でのヒットも再掲
     all_query = f"name = '{filename}' and trashed = false"
     all_resp = drive_service.files().list(q=all_query, fields='files(id, name, parents, owners)').execute()

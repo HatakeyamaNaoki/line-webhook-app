@@ -21,11 +21,11 @@ def handle_webhook(request):
     if message_type == 'text':
         user_text = event['message'].get('text', '').strip()
         if user_text == '集計サマリ作成':
-            # 最新の集計結果CSVを探して、サマリ生成
-            # CSVファイル名は「集計結果_YYYYMMDD.csv」と想定
+            # 最新の集計結果EXCELLを探して、サマリ生成
+            # EXCELファイル名は「集計結果_YYYYMMDD.xlsx」と想定
             JST = pytz.timezone('Asia/Tokyo')
             today = datetime.now(JST).strftime('%Y%m%d')
-            csv_path = f"/tmp/集計結果_{today}.csv"
+            csv_path = f"/tmp/集計結果_{today}.xlsx"
             # ファイルが無い場合はエラー応答
             if not os.path.exists(csv_path):
                 # 必要に応じてLINE返信（未実装。LINE bot SDKで返信したい場合は追加）
