@@ -44,30 +44,30 @@ def normalize_quantity(quantity):
 
 def normalize_unit_ai(product_name, unit, quantity, openai_client):
     from .prompt_templates import normalize_unit_prompt
-    # AIに問い合わせ
     content = f"商品名: {product_name}\n単位: {unit}\n数量: {quantity}"
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": normalize_unit_prompt},
-            {"role": "user", "content": content}
-        ],
-        max_tokens=10,
-        temperature=0
-    )
-    return response.choices[0].message.content.strip()
-
-def adjust_quantity_and_unit(quantity, unit):
-    # g系はkgに変換
-    if unit in ["g", "グラム", "ｇ"]:
-        try:
-            return float(quantity) / 1000, "kg"
-        except Exception:
-            return quantity, unit  # 変換できなければそのまま
-    elif unit in ["kg", "キログラム", "ＫＧ"]:
-        return quantity, "kg"
-    else:
-        return quantity, unit
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": normalize_unit_prompt},
+                {"role": "user", "content": content}
+            ],
+            max_tokens=10,
+            temperature=0
+        )
+        result = response.choices[0].message.content.strip()
+        # --- 返答が空、問い合わせ文そのもの、異常系なら元のunitを返す ---
+        if (not result or 
+            result.startswith("商品名:") or 
+            result.startswith("単位:") or 
+            "単位" in result or 
+            "商品名" in result or 
+            len(result) > 10):  # ←"kg"や"玉"など一般的な単位は2～4文字程度
+            return unit
+        return result
+    except Exception as e:
+        print(f"[AI単位正規化エラー] {e} 元の単位({unit})を返却します")
+        return unit
 
 # 必要に応じてOpenAIクライアントをDI
 def normalize_row(row, openai_client):
