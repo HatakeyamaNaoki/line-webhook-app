@@ -10,7 +10,7 @@ import os
 from openpyxl import Workbook, load_workbook
 import jaconv  # ひらがな→カタカナ正規化用
 from openai import OpenAI  # 新しいOpenAIクライアント
-from prompt_templates import normalize_product_name_prompt
+from .prompt_templates import normalize_product_name_prompt
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
