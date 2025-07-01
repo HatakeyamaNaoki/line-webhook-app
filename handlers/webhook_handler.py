@@ -23,11 +23,11 @@ def handle_webhook(request):
     # --- テキストメッセージの場合（まずはサマリ作成指示か判定） ---
     if message_type == 'text':
         user_text = event['message'].get('text', '').strip()
-        if user_text == '集計サマリ作成':
-            JST = pytz.timezone('Asia/Tokyo')
-            today = datetime.now(JST).strftime('%Y%m%d')
+        JST = pytz.timezone('Asia/Tokyo')
+        today = datetime.now(JST).strftime('%Y%m%d')
 
-            # Driveの「受注集計＞{today}＞集計結果」までのIDを取得
+        # --- 集計サマリ作成 ---
+        if user_text == '集計サマリ作成':
             try:
                 root_id = get_or_create_folder('受注集計')
                 date_id = get_or_create_folder(today, parent_id=root_id)
@@ -66,7 +66,7 @@ def handle_webhook(request):
                 xlsx_with_summary_update(df, file_path)
                 print(f"集計サマリ作成のみ実施: {file_path}")
 
-                # ----- ここでDriveへ再アップロード（上書き） -----
+                # Driveへ再アップロード（上書き）
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().update(
                     fileId=file_id,
@@ -76,6 +76,80 @@ def handle_webhook(request):
 
             except Exception as e:
                 print(f"サマリ生成またはDriveアップロードエラー: {e}")
+
+            return 'OK', 200
+
+        # --- ピッキングリスト作成 ---
+        if user_text == 'ピッキングリスト作成':
+            try:
+                root_id = get_or_create_folder('受注集計')
+                date_id = get_or_create_folder(today, parent_id=root_id)
+                csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
+            except Exception as e:
+                print(f"DriveフォルダID取得エラー: {e}")
+                return 'OK', 200
+
+            filename = f'集計結果_{today}.xlsx'
+            file_path = f"/tmp/{filename}"
+
+            # Drive内でファイルを検索
+            query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
+            response = drive_service.files().list(q=query, fields='files(id)').execute()
+            files = response.get('files', [])
+            if not files:
+                print("集計ファイルが見つかりません")
+                return 'OK', 200
+
+            file_id = files[0]['id']
+            try:
+                request_dl = drive_service.files().get_media(fileId=file_id)
+                with open(file_path, 'wb') as fh:
+                    downloader = MediaIoBaseDownload(fh, request_dl)
+                    done = False
+                    while not done:
+                        status, done = downloader.next_chunk()
+            except Exception as e:
+                print(f"DriveファイルDLエラー: {e}")
+                return 'OK', 200
+
+            # --- ピッキングリスト作成 ---
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path)
+                sheet_names = wb.sheetnames
+                base_sheet = sheet_names[0]  # 「集計結果_YYYYMMDD」シートを前提
+
+                ws = wb[base_sheet]
+                rows = list(ws.iter_rows(values_only=True))
+                header = rows[0]
+                picking_rows = [header]
+
+                # G列（index=6）がtodayと一致する行のみ抽出
+                for row in rows[1:]:
+                    if str(row[6]) == today:  # G列（納品希望日）が今日
+                        picking_rows.append(row)
+
+                # すでにピッキングリストシートがあれば削除して再生成
+                if 'ピッキングリスト' in wb.sheetnames:
+                    del wb['ピッキングリスト']
+                ws_pick = wb.create_sheet('ピッキングリスト')
+
+                for r in picking_rows:
+                    ws_pick.append(r)
+
+                wb.save(file_path)
+                print("ピッキングリストシートを追加・保存しました。")
+
+                # Driveへ再アップロード
+                media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                drive_service.files().update(
+                    fileId=file_id,
+                    media_body=media
+                ).execute()
+                print(f"ピッキングリスト追加後にDriveへ再アップロード完了: {filename}")
+
+            except Exception as e:
+                print(f"ピッキングリスト生成またはDriveアップロードエラー: {e}")
 
             return 'OK', 200
 
