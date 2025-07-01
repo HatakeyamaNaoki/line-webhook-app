@@ -81,10 +81,22 @@ def append_to_xlsx(structured_text, parent_id):
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
 
+    # ★★★【デバッグ：Drive内の同名ファイル一覧を全部出力】★★★
+    print("\n【デバッグ】Drive全体で見える同名ファイル一覧:")
+    all_results = drive_service.files().list(
+        q=f"name='{filename}' and trashed = false",
+        fields="files(id, name, parents, owners)",
+        pageSize=10
+    ).execute()
+    all_files = all_results.get('files', [])
+    for f in all_files:
+        print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f['parents'] if 'parents' in f else '-'} オーナー: {f['owners'][0]['displayName'] if 'owners' in f and f['owners'] else '-'}")
+
     # 既存のxlsxファイルがDriveにあれば取得してマージ
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id)').execute()
     files = response.get('files', [])
+    print(f"【デバッグ】指定親フォルダ {parent_id} で見つかったファイル数: {len(files)}")
     if files:
         file_id = files[0]['id']
         request = drive_service.files().get_media(fileId=file_id)
