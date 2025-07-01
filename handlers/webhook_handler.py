@@ -30,6 +30,24 @@ def handle_webhook(request):
             if not os.path.exists(csv_path):
                 # 必要に応じてLINE返信（未実装。LINE bot SDKで返信したい場合は追加）
                 print("集計ファイルが見つかりません")
+
+                # 検証用
+                parent_id = "1SseXteUYmJI0a1rh0uOFcs4W107JweWR"  # ← ここにあなたの「集計結果」フォルダID
+
+                # このフォルダの中に見えるファイル一覧を取得
+                results = drive_service.files().list(
+                    q=f"'{parent_id}' in parents and trashed = false",
+                    fields="files(id, name, owners)"
+                ).execute()
+
+                files = results.get('files', [])
+                if not files:
+                    print("（APIから）ファイルが見つかりません")
+                else:
+                    print("（APIから見えるファイル一覧）")
+                for f in files:
+                    print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, オーナー: {f['owners'][0]['displayName']}")
+                # 検証用ここまで
             else:
                 # サマリのみ作成
                 xlsx_path = csv_to_xlsx_with_summary(csv_path)

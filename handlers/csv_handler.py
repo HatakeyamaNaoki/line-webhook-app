@@ -179,23 +179,3 @@ def csv_to_xlsx_with_summary(csv_path):
     wb.save(xlsx_path)
     print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
     return xlsx_path
-
-
-# 検証用
-from handlers.file_handler import drive_service
-
-parent_id = "1SseXteUYmJI0a1rh0uOFcs4W107JweWR"  # ← ここにあなたの「集計結果」フォルダID
-
-# このフォルダの中に見えるファイル一覧を取得
-results = drive_service.files().list(
-    q=f"'{parent_id}' in parents and trashed = false",
-    fields="files(id, name, owners)"
-).execute()
-
-files = results.get('files', [])
-if not files:
-    print("（APIから）ファイルが見つかりません")
-else:
-    print("（APIから見えるファイル一覧）")
-    for f in files:
-        print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, オーナー: {f['owners'][0]['displayName']}")
