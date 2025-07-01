@@ -6,7 +6,7 @@ from openai import OpenAI
 from pdf2image import convert_from_path
 from handlers.prompt_templates import IMAGE_ORDER_PROMPT
 from handlers.file_handler import get_or_create_folder, save_pdf_to_drive
-from handlers.csv_handler import append_to_csv
+from handlers.csv_handler import append_to_xlsx
 from handlers.utils import get_now, get_operator_name
 
 def analyze_pdf_with_gpt(pdf_path, operator_name, now_str, now_verbose, openai_client, max_retries=3):
@@ -82,4 +82,4 @@ def process_pdf_message(event):
     os.remove(pdf_path)
 
     # CSV追記
-    append_to_csv(structured_text, csv_folder_id)
+    append_to_xlsx(structured_text, csv_folder_id)

@@ -2,7 +2,7 @@
 
 import os
 from handlers.file_handler import get_or_create_folder, save_text_to_drive
-from handlers.csv_handler import append_to_csv
+from handlers.csv_handler import append_to_xlsx
 from handlers.utils import get_now, get_operator_name
 from .prompt_templates import TEXT_ORDER_PROMPT
 from openai import OpenAI
@@ -58,4 +58,4 @@ def process_text_message(event):
     )
 
     # CSV追記
-    append_to_csv(structured_text, csv_folder_id)
+    append_to_xlsx(structured_text, csv_folder_id)
