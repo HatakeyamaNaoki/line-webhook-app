@@ -198,25 +198,20 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
         print("Excelファイル作成/アップロードエラー:", e)
 
 def xlsx_with_summary_update(df, xlsx_path, openai_client):
-    """ 1シート目: 生データ, 2シート目: 商品名セット集計サマリ で.xlsx作成
-        ※openai_clientを引数で受け取る前提
     """
-    df = df.copy()
+    1シート目: 生データ
+    2シート目: 商品名・サイズ・単位・納品希望日ごとの集計サマリ
+    ※顧客、発注者、納品場所、時間、社内担当者はサマリ側は空欄に
+    """
+    # --- 正規化 ---
     normalized_rows = []
-
-    # 各行を新しい正規化ロジックで変換
     for _, row in df.iterrows():
-        # 商品名（AIカタカナ化）
+        # 正規化ロジック（各自のプロジェクトで実装。ここは例）
         product_name = normalize_product_name_ai(row['商品名'], openai_client)
-        # サイズ（半角英数字）
         size = normalize_size(row['サイズ'])
-        # 数量（半角数字に）
         quantity = normalize_quantity(row['数量'])
-        # 単位（AI＆ルール正規化）
         norm_unit = normalize_unit_ai(product_name, row['単位'], quantity, openai_client)
-        # 数量＆単位補正
         adj_quantity, adj_unit = adjust_quantity_and_unit(quantity, norm_unit)
-        # 他項目はそのまま
         normalized_rows.append({
             "顧客": row.get("顧客", ""),
             "発注者": row.get("発注者", ""),
@@ -228,40 +223,42 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
             "納品場所": row.get("納品場所", ""),
             "時間": row.get("時間", ""),
             "社内担当者": row.get("社内担当者", ""),
-            "備考": row.get("備考", "")  # 備考はそのまま
+            "備考": row.get("備考", "")
         })
-
     df_norm = pd.DataFrame(normalized_rows)
 
-    # 集計キーを商品名・サイズ・単位でまとめる（備考は使わない）
+    # --- 数量は必ず数値型で ---
+    df_norm['数量'] = pd.to_numeric(df_norm['数量'], errors='coerce').fillna(0)
+
+    # --- 集計キー（納品希望日も追加） ---
     df_norm['集計キー'] = (
         df_norm['商品名'].astype(str) + "_" +
         df_norm['サイズ'].astype(str) + "_" +
-        df_norm['単位'].astype(str)
+        df_norm['単位'].astype(str) + "_" +
+        df_norm['納品希望日'].astype(str)
     )
 
-    # サマリ生成（備考は集計キーやサマリ集約に使わない）
+    # --- サマリ生成 ---
     summary = (
         df_norm.groupby('集計キー', as_index=False)
         .agg({
-            '顧客': 'first',
-            '発注者': 'first',
+            '顧客': lambda x: "",
+            '発注者': lambda x: "",
             '商品名': 'first',
             'サイズ': 'first',
-            '数量': 'sum',
+            '数量': 'sum',      # ← 数値として合計！
             '単位': 'first',
             '納品希望日': 'first',
-            '納品場所': 'first',
-            '時間': 'first',
-            '社内担当者': 'first',
+            '納品場所': lambda x: "",
+            '時間': lambda x: "",
+            '社内担当者': lambda x: "",
             '備考': 'first'
         })
     )
-    # 並び順調整
     summary = summary[['顧客', '発注者', '商品名', 'サイズ', '数量', '単位', '納品希望日', '納品場所', '時間', '社内担当者', '備考']]
     summary = summary.sort_values('商品名')
 
-    # xlsx出力
+    # --- xlsx出力 ---
     wb = Workbook()
     ws_raw = wb.active
     ws_raw.title = os.path.splitext(os.path.basename(xlsx_path))[0]
