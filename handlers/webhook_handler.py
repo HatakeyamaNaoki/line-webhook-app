@@ -3,7 +3,7 @@ from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
 from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成
 from handlers.file_handler import get_or_create_folder, drive_service
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from config import CSV_FORMAT_PATH
 
 import os
@@ -24,7 +24,6 @@ def handle_webhook(request):
     if message_type == 'text':
         user_text = event['message'].get('text', '').strip()
         if user_text == '集計サマリ作成':
-            # ドライブ上の最新の集計結果Excelを探して、サマリ生成
             JST = pytz.timezone('Asia/Tokyo')
             today = datetime.now(JST).strftime('%Y%m%d')
 
@@ -32,7 +31,7 @@ def handle_webhook(request):
             try:
                 root_id = get_or_create_folder('受注集計')
                 date_id = get_or_create_folder(today, parent_id=root_id)
-                xlsx_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
+                csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
             except Exception as e:
                 print(f"DriveフォルダID取得エラー: {e}")
                 return 'OK', 200
@@ -41,7 +40,7 @@ def handle_webhook(request):
             file_path = f"/tmp/{filename}"
 
             # Drive内でファイルを検索
-            query = f"name = '{filename}' and '{xlsx_folder_id}' in parents and trashed = false"
+            query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
             response = drive_service.files().list(q=query, fields='files(id)').execute()
             files = response.get('files', [])
             if not files:
@@ -66,9 +65,17 @@ def handle_webhook(request):
                 df = pd.read_excel(file_path)
                 xlsx_with_summary_update(df, file_path)
                 print(f"集計サマリ作成のみ実施: {file_path}")
-                # ここでDriveへ再アップロード等も可能
+
+                # ----- ここでDriveへ再アップロード（上書き） -----
+                media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                drive_service.files().update(
+                    fileId=file_id,
+                    media_body=media
+                ).execute()
+                print(f"サマリ生成後にDriveへ再アップロード完了: {filename}")
+
             except Exception as e:
-                print(f"サマリ生成エラー: {e}")
+                print(f"サマリ生成またはDriveアップロードエラー: {e}")
 
             return 'OK', 200
 
@@ -82,7 +89,6 @@ def handle_webhook(request):
     # --- ファイル(PDF含む) ---
     elif message_type == 'file':
         file_name = event['message'].get('fileName', '').lower()
-        # PDFの場合のみPDFハンドラへ
         if file_name.endswith('.pdf'):
             process_pdf_message(event)
         # 他のファイル型は必要に応じてハンドラ追加
