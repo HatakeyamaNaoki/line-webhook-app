@@ -12,6 +12,7 @@ import jaconv  # ひらがな→カタカナ正規化用
 from openai import OpenAI  # 新しいOpenAIクライアント
 from .prompt_templates import normalize_product_name_prompt
 
+
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
@@ -42,7 +43,7 @@ def normalize_quantity(quantity):
     return jaconv.z2h(str(quantity), kana=False, ascii=False, digit=True).strip()
 
 def normalize_unit_ai(product_name, unit, quantity, openai_client):
-    from prompt_templates import normalize_unit_prompt
+    from .prompt_templates import normalize_unit_prompt
     # AIに問い合わせ
     content = f"商品名: {product_name}\n単位: {unit}\n数量: {quantity}"
     response = openai_client.chat.completions.create(
