@@ -89,6 +89,18 @@ def normalize_row(row, openai_client):
         # 他の項目はそのまま
     }
 
+def adjust_quantity_and_unit(quantity, unit):
+    # g系はkgに変換
+    if unit in ["g", "グラム", "ｇ"]:
+        try:
+            return float(quantity) / 1000, "kg"
+        except Exception:
+            return quantity, unit  # 変換できなければそのまま
+    elif unit in ["kg", "キログラム", "ＫＧ"]:
+        return quantity, "kg"
+    else:
+        return quantity, unit
+
 def append_to_xlsx(structured_text, parent_id, openai_client):
     """ 受け取った注文データを .xlsx で保存/追記しDriveに反映、サマリも作成 """
     if not structured_text.strip():
