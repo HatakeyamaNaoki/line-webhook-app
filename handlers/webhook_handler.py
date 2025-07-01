@@ -118,10 +118,10 @@ def handle_webhook(request):
                 main_sheet_name = list(df.keys())[0]  # 1枚目のシート
                 main_df = df[main_sheet_name]
 
-                # 納品希望日が翌日以降
+                # 納品希望日が翌日以降（必ずstr型で比較する！）
                 tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
                 remaining_df = main_df[main_df['納品希望日'].apply(
-                    lambda x: str(x).isdigit() and x >= tomorrow
+                    lambda x: str(x).isdigit() and str(x) >= tomorrow
                 )]
 
                 wb = load_workbook(file_path)
