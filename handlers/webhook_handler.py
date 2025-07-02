@@ -3,7 +3,7 @@ from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
 from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成
 from handlers.csv_handler import normalize_df
-from handlers.file_handler import get_or_create_folder, drive_service
+from handlers.file_handler import save_file_to_drive, get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from config import CSV_FORMAT_PATH
 
@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openai import OpenAI
 from handlers.csv_handler import create_order_list_sheet
+
+import requests  # ←追加
 
 def handle_webhook(request):
     data = request.get_json()
@@ -152,12 +154,10 @@ def handle_webhook(request):
         # =====================
         if user_text == '発注リスト作成':
             try:
-                # タグ付け表CSVパス
                 tag_csv_path = f"/tmp/タグ付け表.csv"
                 print(f"[DEBUG] root_id: {root_id}")
-                # ドライブのタグ付け表をDL（集計結果フォルダ直下にある前提）
                 tag_query = f"name = 'タグ付け表.csv' and '{root_id}' in parents and trashed = false"
-                print(f"[DEBUG] tag_query: {tag_query}") 
+                print(f"[DEBUG] tag_query: {tag_query}")
                 tag_response = drive_service.files().list(q=tag_query, fields='files(id)').execute()
                 tag_files = tag_response.get('files', [])
                 if not tag_files:
@@ -194,7 +194,32 @@ def handle_webhook(request):
 
     elif message_type == 'file':
         file_name = event['message'].get('fileName', '').lower()
-        if file_name.endswith('.pdf'):
+        file_id = event['message'].get('fileId')
+        # タグ付け表.csvの場合はGoogleドライブ受注集計直下にアップロード
+        if file_name == 'タグ付け表.csv':
+            temp_path = f"/tmp/{file_name}"
+            # LINE Messaging API からファイルデータをダウンロード
+            CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+            headers = {"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
+            url = f"https://api-data.line.me/v2/bot/message/{file_id}/content"
+            r = requests.get(url, headers=headers, stream=True)
+            with open(temp_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+            try:
+                root_id = get_or_create_folder('受注集計')
+                file_metadata = {'name': file_name, 'parents': [root_id]}
+                media = MediaFileUpload(temp_path, mimetype='text/csv')
+                drive_service.files().create(
+                    body=file_metadata, media_body=media, fields='id'
+                ).execute()
+                print("タグ付け表.csvをGoogleドライブにアップロードしました")
+            except Exception as e:
+                print(f"タグ付け表.csvのDrive保存エラー: {e}")
+            return 'OK', 200
+        # それ以外（PDF等）は既存処理
+        elif file_name.endswith('.pdf'):
             process_pdf_message(event)
         # 他のファイル型は必要に応じてハンドラ追加
 
