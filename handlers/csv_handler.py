@@ -356,7 +356,7 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     wb.save(xlsx_path)
     return True
 
-def create_order_sheets(csv_folder_id, today_str, drive_service):
+def create_order_sheets(date_id, today_str, drive_service):
     """
     「注文リスト」シートから、発注先ごとに「注文書フォーマット.xlsx」をコピー・編集し
     「注文書_YYYYMMDD_連番.xlsx」ファイルをGoogle Drive「注文書」フォルダへアップロードする
@@ -371,6 +371,7 @@ def create_order_sheets(csv_folder_id, today_str, drive_service):
     fmt_file_id = fmt_files[0]['id']
 
     # 2. 注文リストシートのDL
+    csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
     filename = f'集計結果_{today_str}.xlsx'
     file_path = f"/tmp/{filename}"
     query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
