@@ -101,28 +101,6 @@ def adjust_quantity_and_unit(quantity, unit):
     else:
         return quantity, unit
 
-ChatGPT:
-もちろんです！
-**あなたの要望（フォーマットが崩れてもなるべく全部アップロード、謝罪文は除外、カラム数も柔軟に調整）**に対応した、
-append_to_xlsx の フルコード を下記にまとめます。
-
-append_to_xlsx（柔軟アップロード対応フルコード）
-python
-コピーする
-編集する
-import pandas as pd
-import io
-import os
-from datetime import datetime
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from handlers.file_handler import drive_service
-from config import CSV_FORMAT_PATH
-import pytz
-
-# CSVのカラム定義
-CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
-JST = pytz.timezone('Asia/Tokyo')
-
 def append_to_xlsx(structured_text, parent_id, openai_client):
     """ OCR等で取得したテキストを、多少フォーマットが崩れていても必ずアップロードする """
 
