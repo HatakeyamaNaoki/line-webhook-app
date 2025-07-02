@@ -200,7 +200,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
         while not done:
             status, done = downloader.next_chunk()
         fh.seek(0)
-        existing = pd.read_excel(fh)
+        existing = pd.read_csv(fh)
         combined = pd.concat([existing, new_data], ignore_index=True)
     else:
         combined = new_data
@@ -294,7 +294,7 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
     wb.save(xlsx_path)
     print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
 
-def create_order_list_sheet(xlsx_path, tag_csv_path):
+def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     """
     「集計結果サマリ」→「注文リスト」シートを作成
     """
@@ -316,7 +316,7 @@ def create_order_list_sheet(xlsx_path, tag_csv_path):
     summary_df = summary_df[1:]
 
     # タグ付け表読み込み
-    tag_df = pd.read_csv(tag_csv_path, dtype=str).fillna("")
+    tag_df = pd.read_excel(tag_xlsx_path, dtype=str).fillna("")
 
     order_list = []
     for _, row in summary_df.iterrows():

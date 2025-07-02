@@ -154,7 +154,7 @@ def handle_webhook(request):
         # =====================
         if user_text == '発注リスト作成':
             try:
-                tag_csv_path = f"/tmp/タグ付け表.xlsx"
+                tag_xlsx_path = f"/tmp/タグ付け表.xlsx"
                 print(f"[DEBUG] root_id: {root_id}")
                 tag_query = f"name = 'タグ付け表.xlsx' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
@@ -165,14 +165,14 @@ def handle_webhook(request):
                     return 'OK', 200
                 tag_file_id = tag_files[0]['id']
                 tag_dl = drive_service.files().get_media(fileId=tag_file_id)
-                with open(tag_csv_path, 'wb') as ftag:
+                with open(tag_xlsx_path, 'wb') as ftag:
                     downloader = MediaIoBaseDownload(ftag, tag_dl)
                     done = False
                     while not done:
                         status, done = downloader.next_chunk()
 
                 # シート作成
-                ok = create_order_list_sheet(file_path, tag_csv_path)
+                ok = create_order_list_sheet(file_path, tag_xlsx_path)
                 if not ok:
                     print("注文リストシート作成に失敗")
                     return 'OK', 200
