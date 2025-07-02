@@ -201,7 +201,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
         while not done:
             status, done = downloader.next_chunk()
         fh.seek(0)
-        existing = pd.read_csv(fh)
+        existing = pd.read_excel(fh)
         combined = pd.concat([existing, new_data], ignore_index=True)
     else:
         combined = new_data
