@@ -195,6 +195,7 @@ def handle_webhook(request):
     elif message_type == 'file':
         file_name = event['message'].get('fileName', '').lower()
         file_id = event['message'].get('fileId')
+
         # タグ付け表.xlsxの場合はGoogleドライブ受注集計直下にアップロード
         if file_name == 'タグ付け表.xlsx':
             temp_path = f"/tmp/{file_name}"
@@ -218,6 +219,30 @@ def handle_webhook(request):
             except Exception as e:
                 print(f"タグ付け表.xlsxのDrive保存エラー: {e}")
             return 'OK', 200
+
+        # 注文書フォーマット.xlsxの場合はGoogleドライブ受注集計直下にアップロード
+        elif file_name == '注文書フォーマット.xlsx':
+            temp_path = f"/tmp/{file_name}"
+            CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+            headers = {"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
+            url = f"https://api-data.line.me/v2/bot/message/{file_id}/content"
+            r = requests.get(url, headers=headers, stream=True)
+            with open(temp_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+            try:
+                root_id = get_or_create_folder('受注集計')
+                file_metadata = {'name': file_name, 'parents': [root_id]}
+                media = MediaFileUpload(temp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                drive_service.files().create(
+                    body=file_metadata, media_body=media, fields='id'
+                ).execute()
+                print("注文書フォーマット.xlsxをGoogleドライブにアップロードしました")
+            except Exception as e:
+                print(f"注文書フォーマット.xlsxのDrive保存エラー: {e}")
+            return 'OK', 200
+
         # それ以外（PDF等）は既存処理
         elif file_name.endswith('.pdf'):
             process_pdf_message(event)
