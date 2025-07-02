@@ -431,7 +431,6 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
         ws["B7"] = g.iloc[0]["郵便番号"]
         ws["B8"] = g.iloc[0]["住所"]
         ws["P4"] = pd.Timestamp.today().strftime("%Y/%m/%d")
-        ws["B15"] = g.iloc[0]["納品希望日"]
 
         # 商品行ループ
         for i, (_, row) in enumerate(g.iterrows()):
@@ -439,9 +438,15 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
             ws[f"B{row_idx}"] = row["商品名"]
             # 消費税欄がなければK列は空欄
             if "消費税" in g.columns:
-                ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "8%" else ""
+                ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "10%" else ""
             ws[f"L{row_idx}"] = row["数量"]
             ws[f"M{row_idx}"] = row["単位"]
+            orig = row["納入希望日"]
+            if isinstance(orig, str) and len(orig) == 8 and orig.isdigit():
+                dt = datetime.strptime(orig, "%Y%m%d")
+                ws[f"H{row_idx}"] = dt.strftime("%Y/%m/%d")
+            else:
+                ws[f"H{row_idx}"] = orig  # フォーマット外ならそのまま
             if row_idx >= 34:
                 break
 
