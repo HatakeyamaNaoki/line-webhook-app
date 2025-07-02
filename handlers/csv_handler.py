@@ -101,48 +101,61 @@ def adjust_quantity_and_unit(quantity, unit):
     else:
         return quantity, unit
 
-def append_to_xlsx(structured_text, parent_id, openai_client):
-    """ OCR等で取得したテキストを、多少フォーマットが崩れていても必ずアップロードする """
-
-    # 謝罪文や空白のみのテキストは除外
-    if not structured_text.strip() or "申し訳ありません" in structured_text or "画像から直接" in structured_text:
+def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_comment="データに不安あり（AI構造化結果、要目視確認）"):
+    """ 構造化テキストを.xlsxで保存・追記し、Driveに反映（備考欄に不安コメントも追加） """
+    if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
-            f.write(structured_text or "No structured_text received!\n")
-        print("謝罪文または空白のみ。ログを保存しました。")
+            f.write("No structured_text received!\n")
+        print("No structured_text received! ログを保存しました。")
         return
 
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.xlsx'
     file_path = f'/tmp/{filename}'
 
-    # 柔軟に行をDataFrame化
+    # 1. 構造化テキスト → DataFrame化
     lines = structured_text.strip().splitlines()
-    fixed_lines = []
+    valid_lines = []
     for line in lines:
-        # 空白行スキップ
-        if not line.strip():
+        line_stripped = line.strip()
+        # 余分な文が含まれていたらスキップ（謝罪文、変換不能文、GPTなどを除外）
+        if not line_stripped:
             continue
-        # カンマ区切り
-        cols = [c.strip() for c in line.strip().split(',')]
-        # 列が不足していれば空白補完、多すぎれば右をカット
-        if len(cols) < len(CSV_HEADERS):
-            cols += [""] * (len(CSV_HEADERS) - len(cols))
-        elif len(cols) > len(CSV_HEADERS):
-            cols = cols[:len(CSV_HEADERS)]
-        fixed_lines.append(cols)
+        if (
+            "申し訳ありません" in line_stripped or
+            "変換できません" in line_stripped or
+            "画像から" in line_stripped or
+            "GPT" in line_stripped or
+            "ご不明点" in line_stripped or
+            line_stripped.count(',') < len(CSV_HEADERS)-1  # カラム数より明らかに少ない
+        ):
+            continue
+        # 本来のCSVカラム数と合致する行のみ採用
+        cols = [c.strip() for c in line_stripped.split(',')]
+        if len(cols) == len(CSV_HEADERS):
+            # 備考欄（最後のカラム）に「不安ありコメント」を追記
+            cols[-1] = (cols[-1] + " " + uncertainty_comment).strip() if cols[-1] else uncertainty_comment
+            valid_lines.append(",".join(cols))
 
-    if not fixed_lines:
+    if not valid_lines:
+        print("⚠ 有効な行がありません。全行ログ保存")
         with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
             f.write(structured_text)
-        print("⚠ 有効な行がありません。全行ログ保存")
         return
 
-    # DataFrame化
-    new_data = pd.DataFrame(fixed_lines, columns=CSV_HEADERS)
+    structured_text_cleaned = "\n".join(valid_lines)
+    try:
+        new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
+    except Exception as e:
+        print("CSV parsing error:", e)
+        with open(f"/tmp/csv_parse_error_{today}.txt", "w", encoding="utf-8") as f:
+            f.write(structured_text)
+        return
+
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
 
-    # Google Drive上の既存ファイル検索＆マージ
+    # 2. Drive上の既存ファイル取得＆マージ
     print("\n【デバッグ】Drive全体で見える同名ファイル一覧:")
     all_results = drive_service.files().list(
         q=f"name='{filename}' and trashed = false",
@@ -174,10 +187,9 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     else:
         combined = new_data
 
-    # サマリ生成＆xlsx保存（openai_client渡す場合は関数名注意）
-    from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成関数へのパス調整（必要に応じて変更）
+    # 3. サマリも含めたxlsxで保存＆Drive反映
+    from .csv_handler import xlsx_with_summary_update  # 必要に応じて調整
     xlsx_with_summary_update(combined, file_path, openai_client)
-
     try:
         media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if files:
