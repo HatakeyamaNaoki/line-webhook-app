@@ -101,48 +101,70 @@ def adjust_quantity_and_unit(quantity, unit):
     else:
         return quantity, unit
 
+ChatGPT:
+もちろんです！
+**あなたの要望（フォーマットが崩れてもなるべく全部アップロード、謝罪文は除外、カラム数も柔軟に調整）**に対応した、
+append_to_xlsx の フルコード を下記にまとめます。
+
+append_to_xlsx（柔軟アップロード対応フルコード）
+python
+コピーする
+編集する
+import pandas as pd
+import io
+import os
+from datetime import datetime
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from handlers.file_handler import drive_service
+from config import CSV_FORMAT_PATH
+import pytz
+
+# CSVのカラム定義
+CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
+JST = pytz.timezone('Asia/Tokyo')
+
 def append_to_xlsx(structured_text, parent_id, openai_client):
-    """ 受け取った注文データを .xlsx で保存/追記しDriveに反映、サマリも作成 """
-    if not structured_text.strip():
+    """ OCR等で取得したテキストを、多少フォーマットが崩れていても必ずアップロードする """
+
+    # 謝罪文や空白のみのテキストは除外
+    if not structured_text.strip() or "申し訳ありません" in structured_text or "画像から直接" in structured_text:
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
-            f.write("No structured_text received!\n")
-        print("No structured_text received! ログを保存しました。")
+            f.write(structured_text or "No structured_text received!\n")
+        print("謝罪文または空白のみ。ログを保存しました。")
         return
 
     today = datetime.now(JST).strftime('%Y%m%d')
     filename = f'集計結果_{today}.xlsx'
     file_path = f'/tmp/{filename}'
 
-    # 注文データをDataFrameに
+    # 柔軟に行をDataFrame化
     lines = structured_text.strip().splitlines()
-    valid_lines = []
+    fixed_lines = []
     for line in lines:
-        line_stripped = line.strip()
-        if not line_stripped:
+        # 空白行スキップ
+        if not line.strip():
             continue
-        cols = [c.strip() for c in line_stripped.split(',')]
-        if len(cols) == len(CSV_HEADERS):
-            valid_lines.append(",".join(cols))
+        # カンマ区切り
+        cols = [c.strip() for c in line.strip().split(',')]
+        # 列が不足していれば空白補完、多すぎれば右をカット
+        if len(cols) < len(CSV_HEADERS):
+            cols += [""] * (len(CSV_HEADERS) - len(cols))
+        elif len(cols) > len(CSV_HEADERS):
+            cols = cols[:len(CSV_HEADERS)]
+        fixed_lines.append(cols)
 
-    if not valid_lines:
-        print("⚠ 有効な行がありません。全行ログ保存")
+    if not fixed_lines:
         with open(f"/tmp/failed_structured_{today}.txt", "w", encoding="utf-8") as f:
             f.write(structured_text)
+        print("⚠ 有効な行がありません。全行ログ保存")
         return
 
-    structured_text_cleaned = "\n".join(valid_lines)
-    try:
-        new_data = pd.read_csv(io.StringIO(structured_text_cleaned), header=None, names=CSV_HEADERS)
-    except Exception as e:
-        print("CSV parsing error:", e)
-        with open(f"/tmp/csv_parse_error_{today}.txt", "w", encoding="utf-8") as f:
-            f.write(structured_text)
-        return
-
+    # DataFrame化
+    new_data = pd.DataFrame(fixed_lines, columns=CSV_HEADERS)
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
 
-    # デバッグ: Drive全体で見える同名ファイル一覧
+    # Google Drive上の既存ファイル検索＆マージ
     print("\n【デバッグ】Drive全体で見える同名ファイル一覧:")
     all_results = drive_service.files().list(
         q=f"name='{filename}' and trashed = false",
@@ -153,21 +175,12 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     for f in all_files:
         print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '-'}")
 
-    # 既存のxlsxファイルがDriveにあれば取得してマージ
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
     response = drive_service.files().list(q=query, fields='files(id, name, parents, owners)').execute()
     files = response.get('files', [])
     print(f"【デバッグ】指定親フォルダ {parent_id} で見つかったファイル数: {len(files)}")
     for f in files:
         print(f"【デバッグ】指定親: ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '?'}")
-
-    # 追加: Drive全体でのヒットも再掲
-    all_query = f"name = '{filename}' and trashed = false"
-    all_resp = drive_service.files().list(q=all_query, fields='files(id, name, parents, owners)').execute()
-    all_files = all_resp.get('files', [])
-    print(f"【デバッグ】Drive全体で '{filename}' のファイル数: {len(all_files)}")
-    for f in all_files:
-        print(f"【デバッグ】全体: ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '?'}")
 
     if files:
         file_id = files[0]['id']
@@ -183,10 +196,11 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     else:
         combined = new_data
 
-    # サマリも含めたxlsxで保存＆Drive反映
+    # サマリ生成＆xlsx保存（openai_client渡す場合は関数名注意）
+    from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成関数へのパス調整（必要に応じて変更）
     xlsx_with_summary_update(combined, file_path, openai_client)
+
     try:
-        # Driveへ新規 or update
         media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if files:
             drive_service.files().update(fileId=file_id, media_body=media).execute()
