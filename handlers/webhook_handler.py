@@ -191,15 +191,15 @@ def handle_webhook(request):
         # =====================
         # 発注書作成（←ここでcsv_handlerからインポートした関数を使用）
         # =====================
-        if user_text == '発注書作成':
+        if user_text == '注文書作成':
             try:
                 ok = create_order_sheets(date_id, today, drive_service)
                 if not ok:
-                    print("発注書作成に失敗")
+                    print("注文書作成に失敗")
                     return 'OK', 200
-                print("発注書自動作成完了！")
+                print("注文書自動作成完了！")
             except Exception as e:
-                print(f"発注書作成エラー: {e}")
+                print(f"注文書作成エラー: {e}")
             return 'OK', 200
 
         # --- 通常テキスト（注文等）は既存ハンドラへ ---
