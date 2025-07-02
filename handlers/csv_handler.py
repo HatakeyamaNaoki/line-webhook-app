@@ -356,7 +356,7 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     wb.save(xlsx_path)
     return True
 
-def create_order_sheets(date_id, today_str, drive_service):
+def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     """
     「注文リスト」シートから、発注先ごとに「注文書フォーマット.xlsx」をコピー・編集し
     「注文書_YYYYMMDD_連番.xlsx」ファイルをGoogle Drive「注文書」フォルダへアップロードする
@@ -371,7 +371,6 @@ def create_order_sheets(date_id, today_str, drive_service):
     fmt_file_id = fmt_files[0]['id']
 
     # 2. 注文リストシートのDL
-    csv_folder_id = get_or_create_folder('集計結果', parent_id=date_id)
     filename = f'集計結果_{today_str}.xlsx'
     file_path = f"/tmp/{filename}"
     query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
@@ -401,7 +400,7 @@ def create_order_sheets(date_id, today_str, drive_service):
 
     # 3. 注文書フォルダの作成
     from handlers.file_handler import get_or_create_folder
-    order_folder_id = get_or_create_folder("注文書", parent_id=today_folder_id)
+    order_folder_id = get_or_create_folder("注文書", parent_id=date_id)
 
     # 4. 発注先ごとにグループ
     grouped = df.groupby("発注先")
