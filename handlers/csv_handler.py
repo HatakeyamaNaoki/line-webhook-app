@@ -334,7 +334,18 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
             supplier = match.iloc[0].get('発注先', "")
             zipcode = match.iloc[0].get('郵便番号', "")
             address = match.iloc[0].get('住所', "")
-            tax_rate = match.iloc[0].get('税率', "")
+            raw_tax = match.iloc[0].get('税率', "")
+            if raw_tax != "":
+                try:
+                    tax_float = float(raw_tax)
+                    if tax_float < 1.0:
+                        tax_rate = f"{int(round(tax_float * 100))}%"
+                    else:
+                        tax_rate = f"{int(round(tax_float))}%"
+                except Exception:
+                    tax_rate = str(raw_tax)
+            else:
+                tax_rate = ""
 
         order_list.append([
             prod,
