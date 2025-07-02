@@ -13,6 +13,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openai import OpenAI
+from handlers.csv_handler import create_order_list_sheet
 
 def handle_webhook(request):
     data = request.get_json()
@@ -144,6 +145,43 @@ def handle_webhook(request):
                 print("受注残シート作成＆Drive再アップロード完了！")
             except Exception as e:
                 print(f"受注残作成またはDriveアップロードエラー: {e}")
+            return 'OK', 200
+        
+        # =====================
+        # 発注リスト作成
+        # =====================
+        if user_text == '発注リスト作成':
+            try:
+                # タグ付け表CSVパス
+                tag_csv_path = f"/tmp/タグ付け表.csv"
+                # ドライブのタグ付け表をDL（集計結果フォルダ直下にある前提）
+                tag_query = f"name = 'タグ付け表.csv' and '{csv_folder_id}' in parents and trashed = false"
+                tag_response = drive_service.files().list(q=tag_query, fields='files(id)').execute()
+                tag_files = tag_response.get('files', [])
+                if not tag_files:
+                    print("タグ付け表.csvが見つかりません")
+                    return 'OK', 200
+                tag_file_id = tag_files[0]['id']
+                tag_dl = drive_service.files().get_media(fileId=tag_file_id)
+                with open(tag_csv_path, 'wb') as ftag:
+                    downloader = MediaIoBaseDownload(ftag, tag_dl)
+                    done = False
+                    while not done:
+                        status, done = downloader.next_chunk()
+
+                # シート作成
+                ok = create_order_list_sheet(file_path, tag_csv_path)
+                if not ok:
+                    print("注文リストシート作成に失敗")
+                    return 'OK', 200
+
+                # Drive再アップロード
+                media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                print("注文リスト作成＆Drive再アップロード完了！")
+
+            except Exception as e:
+                print(f"注文リスト作成またはDriveアップロードエラー: {e}")
             return 'OK', 200
 
         # --- 通常テキスト（注文等）は既存ハンドラへ ---

@@ -293,3 +293,64 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
         ws_summary.append(row)
     wb.save(xlsx_path)
     print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
+
+def create_order_list_sheet(xlsx_path, tag_csv_path):
+    """
+    「集計結果サマリ」→「注文リスト」シートを作成
+    """
+    import pandas as pd
+    from openpyxl import load_workbook
+
+    # 必要なヘッダー
+    order_headers = ["商品名", "サイズ", "数量", "単位", "納品希望日", "備考", "発注先", "郵便番号", "住所"]
+
+    # サマリ読み込み
+    wb = load_workbook(xlsx_path)
+    if "集計結果サマリ" not in wb.sheetnames:
+        print("集計結果サマリシートがありません")
+        return False
+
+    ws = wb["集計結果サマリ"]
+    summary_df = pd.DataFrame(ws.values)
+    summary_df.columns = summary_df.iloc[0]
+    summary_df = summary_df[1:]
+
+    # タグ付け表読み込み
+    tag_df = pd.read_csv(tag_csv_path, dtype=str).fillna("")
+
+    order_list = []
+    for _, row in summary_df.iterrows():
+        prod, size = row['商品名'], row['サイズ']
+
+        match = tag_df[(tag_df['商品名'] == prod) & (tag_df['サイズ'] == size)]
+        if len(match) == 0:
+            match = tag_df[(tag_df['商品名'] == prod) & (tag_df['サイズ'] == "")]
+        if len(match) == 0:
+            supplier, zipcode, address = "", "", ""
+        else:
+            supplier = match.iloc[0]['発注先']
+            zipcode = match.iloc[0]['郵便番号']
+            address = match.iloc[0]['住所']
+
+        order_list.append([
+            prod,
+            size,
+            row['数量'],
+            row['単位'],
+            row['納品希望日'],
+            row.get('備考', ""),
+            supplier,
+            zipcode,
+            address
+        ])
+
+    # 既存シート削除
+    if "注文リスト" in wb.sheetnames:
+        del wb["注文リスト"]
+    ws_order = wb.create_sheet("注文リスト")
+    ws_order.append(order_headers)
+    for r in order_list:
+        ws_order.append(list(r))
+
+    wb.save(xlsx_path)
+    return True
