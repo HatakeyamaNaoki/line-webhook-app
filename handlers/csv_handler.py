@@ -101,8 +101,8 @@ def adjust_quantity_and_unit(quantity, unit):
     else:
         return quantity, unit
 
-def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_comment="データに不安あり（AI構造化結果、要目視確認）"):
-    """ 構造化テキストを.xlsxで保存・追記し、Driveに反映（備考欄に不安コメントも追加） """
+def append_to_xlsx(structured_text, parent_id, openai_client):
+    """ 構造化テキストを.xlsxで保存・追記し、Driveに反映（備考コメントなしバージョン） """
     if not structured_text.strip():
         with open("/tmp/failed_structured_text.txt", "w", encoding="utf-8") as f:
             f.write("No structured_text received!\n")
@@ -113,12 +113,11 @@ def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_commen
     filename = f'集計結果_{today}.xlsx'
     file_path = f'/tmp/{filename}'
 
-    # 1. 構造化テキスト → DataFrame化
+    # 構造化テキスト → DataFrame化
     lines = structured_text.strip().splitlines()
     valid_lines = []
     for line in lines:
         line_stripped = line.strip()
-        # 余分な文が含まれていたらスキップ（謝罪文、変換不能文、GPTなどを除外）
         if not line_stripped:
             continue
         if (
@@ -127,14 +126,11 @@ def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_commen
             "画像から" in line_stripped or
             "GPT" in line_stripped or
             "ご不明点" in line_stripped or
-            line_stripped.count(',') < len(CSV_HEADERS)-1  # カラム数より明らかに少ない
+            line_stripped.count(',') < len(CSV_HEADERS)-1
         ):
             continue
-        # 本来のCSVカラム数と合致する行のみ採用
         cols = [c.strip() for c in line_stripped.split(',')]
         if len(cols) == len(CSV_HEADERS):
-            # 備考欄（最後のカラム）に「不安ありコメント」を追記
-            cols[-1] = (cols[-1] + " " + uncertainty_comment).strip() if cols[-1] else uncertainty_comment
             valid_lines.append(",".join(cols))
 
     if not valid_lines:
@@ -155,7 +151,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_commen
     now_str = datetime.now(JST).strftime('%Y%m%d%H')
     new_data['時間'] = now_str
 
-    # 2. Drive上の既存ファイル取得＆マージ
+    # Drive上の既存ファイル取得＆マージ
     print("\n【デバッグ】Drive全体で見える同名ファイル一覧:")
     all_results = drive_service.files().list(
         q=f"name='{filename}' and trashed = false",
@@ -187,7 +183,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_commen
     else:
         combined = new_data
 
-    # 3. サマリも含めたxlsxで保存＆Drive反映
+    # サマリも含めたxlsxで保存＆Drive反映
     from .csv_handler import xlsx_with_summary_update  # 必要に応じて調整
     xlsx_with_summary_update(combined, file_path, openai_client)
     try:
@@ -200,7 +196,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client, uncertainty_commen
         print(f"Excelファイル作成成功: {file_path}")
     except Exception as e:
         print("Excelファイル作成/アップロードエラー:", e)
-
+        
 def xlsx_with_summary_update(df, xlsx_path, openai_client):
     """
     1シート目: 生データ
