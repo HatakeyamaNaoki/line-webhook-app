@@ -64,7 +64,7 @@ def handle_webhook(request):
             files = response.get('files', [])
             if not files:
                 print("空ファイル作成後も取得できません")
-            return 'OK', 200
+                return 'OK', 200
 
         file_id = files[0]['id']
         # ファイルを一時保存
