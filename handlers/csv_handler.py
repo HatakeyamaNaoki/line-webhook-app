@@ -16,7 +16,6 @@ import re
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
 
-
 def normalize_product_name_ai(product_name, openai_client):
     # 生成AIでカタカナ統一
     response = openai_client.chat.completions.create(
@@ -105,6 +104,11 @@ def normalize_row(row, openai_client):
         "単位": adj_unit,
         # 他の項目はそのまま
     }
+
+def normalize_df(df, openai_client):
+    # DataFrame全体を正規化
+    normalized_rows = [normalize_row(row, openai_client) for _, row in df.iterrows()]
+    return pd.DataFrame(normalized_rows)
 
 def adjust_quantity_and_unit(quantity, unit):
     # g系はkgに変換

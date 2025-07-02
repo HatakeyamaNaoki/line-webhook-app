@@ -2,6 +2,7 @@ from handlers.image_handler import process_image_message
 from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
 from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成
+from handlers.csv_handler import normalize_df
 from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from config import CSV_FORMAT_PATH
@@ -67,7 +68,8 @@ def handle_webhook(request):
             try:
                 openai_client = OpenAI()
                 df = pd.read_excel(file_path)
-                xlsx_with_summary_update(df, file_path, openai_client)
+                df_norm = normalize_df(df, openai_client)
+                xlsx_with_summary_update(df_norm, file_path, openai_client)
                 print(f"集計サマリ作成のみ実施: {file_path}")
 
                 # 再アップロード
