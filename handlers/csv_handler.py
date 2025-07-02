@@ -378,6 +378,7 @@ def create_order_sheets(csv_folder_id, today_str, drive_service):
     files = response.get('files', [])
     if not files:
         print("集計ファイルが見つかりません")
+        print("csv_folder_id:", csv_folder_id)
         return False
     excel_file_id = files[0]['id']
     excel_tmp_path = f"/tmp/{filename}"
@@ -392,7 +393,6 @@ def create_order_sheets(csv_folder_id, today_str, drive_service):
     wb = load_workbook(excel_tmp_path)
     if "注文リスト" not in wb.sheetnames:
         print("注文リストシートがありません")
-        print("csv_folder_id:", csv_folder_id)
         return False
     df = pd.DataFrame(wb["注文リスト"].values)
     df.columns = df.iloc[0]
