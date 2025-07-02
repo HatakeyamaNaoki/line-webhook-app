@@ -3,7 +3,7 @@ from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
 from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成
 from handlers.csv_handler import normalize_df
-from handlers.file_handler import save_file_to_drive, get_or_create_folder, drive_service
+from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from config import CSV_FORMAT_PATH
 
