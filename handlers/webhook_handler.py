@@ -210,7 +210,7 @@ def handle_webhook(request):
             try:
                 root_id = get_or_create_folder('受注集計')
                 file_metadata = {'name': file_name, 'parents': [root_id]}
-                media = MediaFileUpload(temp_path, mimetype='text/csv')
+                media = MediaFileUpload(temp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().create(
                     body=file_metadata, media_body=media, fields='id'
                 ).execute()
