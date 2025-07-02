@@ -11,7 +11,7 @@ from openpyxl import Workbook, load_workbook
 import jaconv  # ひらがな→カタカナ正規化用
 from openai import OpenAI  # 新しいOpenAIクライアント
 from .prompt_templates import normalize_product_name_prompt
-
+import re
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
@@ -42,6 +42,22 @@ def normalize_quantity(quantity):
         return ""
     return jaconv.z2h(str(quantity), kana=False, ascii=False, digit=True).strip()
 
+def normalize_unit_postprocess(unit):
+    """
+    英字は半角大文字、カタカナは全角化（ひらがな→カタカナも対応）
+    """
+    if not unit:
+        return ""
+    unit = str(unit).strip()
+    # ひらがな→カタカナ
+    unit = jaconv.hira2kata(unit)
+    # 全角英字→半角大文字
+    unit = jaconv.z2h(unit, kana=False, ascii=True, digit=True)
+    unit = re.sub(r'[a-z]', lambda m: m.group(0).upper(), unit)
+    # 半角カタカナ→全角カタカナ
+    unit = jaconv.h2z(unit, ascii=False, digit=False)
+    return unit
+
 def normalize_unit_ai(product_name, unit, quantity, openai_client):
     from .prompt_templates import normalize_unit_prompt
     content = f"商品名: {product_name}\n単位: {unit}\n数量: {quantity}"
@@ -62,12 +78,13 @@ def normalize_unit_ai(product_name, unit, quantity, openai_client):
             result.startswith("単位:") or 
             "単位" in result or 
             "商品名" in result or 
-            len(result) > 10):  # ←"kg"や"玉"など一般的な単位は2～4文字程度
-            return unit
-        return result
+            len(result) > 10):  # "kg"や"玉"など一般的な単位は2～4文字程度
+            return normalize_unit_postprocess(unit)
+        # 返答も正規化
+        return normalize_unit_postprocess(result)
     except Exception as e:
         print(f"[AI単位正規化エラー] {e} 元の単位({unit})を返却します")
-        return unit
+        return normalize_unit_postprocess(unit)
 
 # 必要に応じてOpenAIクライアントをDI
 def normalize_row(row, openai_client):
@@ -196,7 +213,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
         print(f"Excelファイル作成成功: {file_path}")
     except Exception as e:
         print("Excelファイル作成/アップロードエラー:", e)
-        
+
 def xlsx_with_summary_update(df, xlsx_path, openai_client):
     """
     1シート目: 生データ
