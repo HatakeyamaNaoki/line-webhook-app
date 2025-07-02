@@ -298,12 +298,13 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
 def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     """
     「集計結果サマリ」→「注文リスト」シートを作成
+    備考と発注先の間に税率（タグ付け表由来）を追加
     """
     import pandas as pd
     from openpyxl import load_workbook
 
-    # 必要なヘッダー
-    order_headers = ["商品名", "サイズ", "数量", "単位", "納品希望日", "備考", "発注先", "郵便番号", "住所"]
+    # 必要なヘッダーに「税率」を追加
+    order_headers = ["商品名", "サイズ", "数量", "単位", "納品希望日", "備考", "税率", "発注先", "郵便番号", "住所"]
 
     # サマリ読み込み
     wb = load_workbook(xlsx_path)
@@ -327,11 +328,13 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
         if len(match) == 0:
             match = tag_df[(tag_df['商品名'] == prod) & (tag_df['サイズ'] == "")]
         if len(match) == 0:
-            supplier, zipcode, address = "", "", ""
+            # データがなければ空欄
+            supplier, zipcode, address, tax_rate = "", "", "", ""
         else:
-            supplier = match.iloc[0]['発注先']
-            zipcode = match.iloc[0]['郵便番号']
-            address = match.iloc[0]['住所']
+            supplier = match.iloc[0].get('発注先', "")
+            zipcode = match.iloc[0].get('郵便番号', "")
+            address = match.iloc[0].get('住所', "")
+            tax_rate = match.iloc[0].get('税率', "")
 
         order_list.append([
             prod,
@@ -340,6 +343,7 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
             row['単位'],
             row['納品希望日'],
             row.get('備考', ""),
+            tax_rate,        # ★ここに税率
             supplier,
             zipcode,
             address
@@ -441,6 +445,7 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
                 ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "10%" else ""
             ws[f"L{row_idx}"] = row["数量"]
             ws[f"M{row_idx}"] = row["単位"]
+            ws[f"F{row_idx}"] = row["サイズ"]
             orig = row["納品希望日"]
             if isinstance(orig, str) and len(orig) == 8 and orig.isdigit():
                 dt = datetime.strptime(orig, "%Y%m%d")
