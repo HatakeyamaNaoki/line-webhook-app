@@ -155,7 +155,7 @@ def handle_webhook(request):
                 # タグ付け表CSVパス
                 tag_csv_path = f"/tmp/タグ付け表.csv"
                 # ドライブのタグ付け表をDL（集計結果フォルダ直下にある前提）
-                tag_query = f"name = 'タグ付け表.csv' and '{csv_folder_id}' in parents and trashed = false"
+                tag_query = f"name = 'タグ付け表.csv' and '{root_id}' in parents and trashed = false"
                 tag_response = drive_service.files().list(q=tag_query, fields='files(id)').execute()
                 tag_files = tag_response.get('files', [])
                 if not tag_files:
