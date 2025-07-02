@@ -51,6 +51,19 @@ def handle_webhook(request):
         files = response.get('files', [])
         if not files:
             print("集計ファイルが見つかりません")
+            # --- 新規作成ロジックここから ---
+            df_empty = pd.DataFrame(columns=["顧客", "発注者", "商品名", "サイズ", "数量", "単位", "納品希望日", "納品場所", "時間", "社内担当者", "備考"])
+            df_empty.to_excel(file_path, index=False)
+            media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            file_metadata = {'name': filename, 'parents': [csv_folder_id]}
+            drive_service.files().create(
+                body=file_metadata, media_body=media, fields='id'
+            ).execute()
+            print("空の集計ファイルを新規作成しアップロードしました")
+            response = drive_service.files().list(q=query, fields='files(id)').execute()
+            files = response.get('files', [])
+            if not files:
+                print("空ファイル作成後も取得できません")
             return 'OK', 200
 
         file_id = files[0]['id']
