@@ -1,8 +1,12 @@
 from handlers.image_handler import process_image_message
 from handlers.text_handler import process_text_message
 from handlers.pdf_handler import process_pdf_message
-from handlers.csv_handler import xlsx_with_summary_update  # サマリ生成
-from handlers.csv_handler import normalize_df
+from handlers.csv_handler import (
+    xlsx_with_summary_update,  # サマリ生成
+    normalize_df,
+    create_order_list_sheet,
+    create_order_sheets,       # ← 注文書自動作成
+)
 from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from config import CSV_FORMAT_PATH
@@ -13,9 +17,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openai import OpenAI
-from handlers.csv_handler import create_order_list_sheet
-
-import requests  # ←追加
+import requests
 
 def handle_webhook(request):
     data = request.get_json()
@@ -148,7 +150,7 @@ def handle_webhook(request):
             except Exception as e:
                 print(f"受注残作成またはDriveアップロードエラー: {e}")
             return 'OK', 200
-        
+
         # =====================
         # 発注リスト作成
         # =====================
@@ -186,6 +188,20 @@ def handle_webhook(request):
                 print(f"注文リスト作成またはDriveアップロードエラー: {e}")
             return 'OK', 200
 
+        # =====================
+        # 発注書作成（←ここでcsv_handlerからインポートした関数を使用）
+        # =====================
+        if user_text == '発注書作成':
+            try:
+                ok = create_order_sheets(date_id, today, drive_service)
+                if not ok:
+                    print("発注書作成に失敗")
+                    return 'OK', 200
+                print("発注書自動作成完了！")
+            except Exception as e:
+                print(f"発注書作成エラー: {e}")
+            return 'OK', 200
+
         # --- 通常テキスト（注文等）は既存ハンドラへ ---
         process_text_message(event)
 
@@ -199,7 +215,6 @@ def handle_webhook(request):
         # タグ付け表.xlsxの場合はGoogleドライブ受注集計直下にアップロード
         if file_name == 'タグ付け表.xlsx':
             temp_path = f"/tmp/{file_name}"
-            # LINE Messaging API からファイルデータをダウンロード
             CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
             headers = {"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
             url = f"https://api-data.line.me/v2/bot/message/{file_id}/content"

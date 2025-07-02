@@ -12,6 +12,7 @@ import jaconv  # ひらがな→カタカナ正規化用
 from openai import OpenAI  # 新しいOpenAIクライアント
 from .prompt_templates import normalize_product_name_prompt
 import re
+import shutil
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
@@ -353,4 +354,102 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
         ws_order.append(list(r))
 
     wb.save(xlsx_path)
+    return True
+
+def create_order_sheets(today_folder_id, today_str, drive_service):
+    """
+    「注文リスト」シートから、発注先ごとに「注文書フォーマット.xlsx」をコピー・編集し
+    「注文書_YYYYMMDD_連番.xlsx」ファイルをGoogle Drive「注文書」フォルダへアップロードする
+    """
+    # 1. 注文書フォーマット.xlsx取得
+    fmt_query = f"name = '注文書フォーマット.xlsx' and trashed = false"
+    fmt_resp = drive_service.files().list(q=fmt_query, fields='files(id)').execute()
+    fmt_files = fmt_resp.get('files', [])
+    if not fmt_files:
+        print("注文書フォーマット.xlsxが見つかりません")
+        return False
+    fmt_file_id = fmt_files[0]['id']
+
+    # 2. 注文リストシートのDL
+    filename = f'集計結果_{today_str}.xlsx'
+    file_path = f"/tmp/{filename}"
+    query = f"name = '{filename}' and '{today_folder_id}' in parents and trashed = false"
+    response = drive_service.files().list(q=query, fields='files(id)').execute()
+    files = response.get('files', [])
+    if not files:
+        print("集計ファイルが見つかりません")
+        return False
+    excel_file_id = files[0]['id']
+    excel_tmp_path = f"/tmp/{filename}"
+    request_dl = drive_service.files().get_media(fileId=excel_file_id)
+    with open(excel_tmp_path, 'wb') as fh:
+        downloader = MediaIoBaseDownload(fh, request_dl)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+
+    from openpyxl import load_workbook
+    wb = load_workbook(excel_tmp_path)
+    if "注文リスト" not in wb.sheetnames:
+        print("注文リストシートがありません")
+        return False
+    df = pd.DataFrame(wb["注文リスト"].values)
+    df.columns = df.iloc[0]
+    df = df[1:]
+
+    # 3. 注文書フォルダの作成
+    from handlers.file_handler import get_or_create_folder
+    order_folder_id = get_or_create_folder("注文書", parent_id=today_folder_id)
+
+    # 4. 発注先ごとにグループ
+    grouped = df.groupby("発注先")
+    count = 1
+    for supplier, g in grouped:
+        if not supplier or str(supplier).strip() == "":
+            continue
+
+        # フォーマットファイルをDL＆コピー
+        fmt_tmp_path = f"/tmp/注文書フォーマット.xlsx"
+        fmt_dl = drive_service.files().get_media(fileId=fmt_file_id)
+        with open(fmt_tmp_path, 'wb') as ffmt:
+            downloader = MediaIoBaseDownload(ffmt, fmt_dl)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+
+        dest_name = f"注文書_{today_str}_{count:03d}.xlsx"
+        dest_path = f"/tmp/{dest_name}"
+        shutil.copy(fmt_tmp_path, dest_path)
+
+        # 注文書記載
+        wbo = load_workbook(dest_path)
+        ws = wbo.active
+
+        # B6, B7, B8, P4, B15
+        ws["B6"] = g.iloc[0]["発注先"]
+        ws["B7"] = g.iloc[0]["郵便番号"]
+        ws["B8"] = g.iloc[0]["住所"]
+        ws["P4"] = pd.Timestamp.today().strftime("%Y/%m/%d")
+        ws["B15"] = g.iloc[0]["納品希望日"]
+
+        # 商品行ループ
+        for i, (_, row) in enumerate(g.iterrows()):
+            row_idx = 20 + i  # 20~34
+            ws[f"B{row_idx}"] = row["商品名"]
+            # 消費税欄がなければK列は空欄
+            if "消費税" in g.columns:
+                ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "8%" else ""
+            ws[f"L{row_idx}"] = row["数量"]
+            ws[f"M{row_idx}"] = row["単位"]
+            if row_idx >= 34:
+                break
+
+        wbo.save(dest_path)
+
+        # Driveへアップロード
+        file_metadata = {'name': dest_name, 'parents': [order_folder_id]}
+        media = MediaFileUpload(dest_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        drive_service.files().create(body=file_metadata, media_body=media).execute()
+        count += 1
+
     return True
