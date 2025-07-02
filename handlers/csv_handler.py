@@ -441,7 +441,7 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
                 ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "10%" else ""
             ws[f"L{row_idx}"] = row["数量"]
             ws[f"M{row_idx}"] = row["単位"]
-            orig = row["納入希望日"]
+            orig = row["納品希望日"]
             if isinstance(orig, str) and len(orig) == 8 and orig.isdigit():
                 dt = datetime.strptime(orig, "%Y%m%d")
                 ws[f"H{row_idx}"] = dt.strftime("%Y/%m/%d")
