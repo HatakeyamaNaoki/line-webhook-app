@@ -154,14 +154,14 @@ def handle_webhook(request):
         # =====================
         if user_text == '発注リスト作成':
             try:
-                tag_csv_path = f"/tmp/タグ付け表.csv"
+                tag_csv_path = f"/tmp/タグ付け表.xlsx"
                 print(f"[DEBUG] root_id: {root_id}")
-                tag_query = f"name = 'タグ付け表.csv' and '{root_id}' in parents and trashed = false"
+                tag_query = f"name = 'タグ付け表.xlsx' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
                 tag_response = drive_service.files().list(q=tag_query, fields='files(id)').execute()
                 tag_files = tag_response.get('files', [])
                 if not tag_files:
-                    print("タグ付け表.csvが見つかりません")
+                    print("タグ付け表.xlsxが見つかりません")
                     return 'OK', 200
                 tag_file_id = tag_files[0]['id']
                 tag_dl = drive_service.files().get_media(fileId=tag_file_id)
@@ -195,8 +195,8 @@ def handle_webhook(request):
     elif message_type == 'file':
         file_name = event['message'].get('fileName', '').lower()
         file_id = event['message'].get('fileId')
-        # タグ付け表.csvの場合はGoogleドライブ受注集計直下にアップロード
-        if file_name == 'タグ付け表.csv':
+        # タグ付け表.xlsxの場合はGoogleドライブ受注集計直下にアップロード
+        if file_name == 'タグ付け表.xlsx':
             temp_path = f"/tmp/{file_name}"
             # LINE Messaging API からファイルデータをダウンロード
             CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -214,9 +214,9 @@ def handle_webhook(request):
                 drive_service.files().create(
                     body=file_metadata, media_body=media, fields='id'
                 ).execute()
-                print("タグ付け表.csvをGoogleドライブにアップロードしました")
+                print("タグ付け表.xlsxをGoogleドライブにアップロードしました")
             except Exception as e:
-                print(f"タグ付け表.csvのDrive保存エラー: {e}")
+                print(f"タグ付け表.xlsxのDrive保存エラー: {e}")
             return 'OK', 200
         # それ以外（PDF等）は既存処理
         elif file_name.endswith('.pdf'):
