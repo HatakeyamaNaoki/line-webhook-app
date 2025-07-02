@@ -97,13 +97,14 @@ def normalize_row(row, openai_client):
     norm_unit = normalize_unit_ai(product_name, row['単位'], quantity, openai_client)
     # 数量・単位補正
     adj_quantity, adj_unit = adjust_quantity_and_unit(quantity, norm_unit)
-    return {
-        "商品名": product_name,
-        "サイズ": size,
-        "数量": adj_quantity,
-        "単位": adj_unit,
-        # 他の項目はそのまま
-    }
+    
+    # すべてのカラムを残して新しいdictを作る
+    new_row = dict(row)  # 元のデータをコピー
+    new_row['商品名'] = product_name
+    new_row['サイズ'] = size
+    new_row['数量'] = adj_quantity
+    new_row['単位'] = adj_unit
+    return new_row
 
 def normalize_df(df, openai_client):
     # DataFrame全体を正規化
