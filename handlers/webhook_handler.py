@@ -226,6 +226,11 @@ def handle_webhook(request):
                 print("main_df.columns:", list(main_df.columns))
                 remaining_df = main_df[main_df['納品希望日'].astype(str) >= tomorrow]
 
+                print("【受注残】main_df.columns(list):", list(main_df.columns))
+                print("【受注残】main_df.columns重複:", main_df.columns[main_df.columns.duplicated()])
+                print("【受注残】main_df.index重複:", main_df.index[main_df.index.duplicated()])
+                print("【受注残】main_df.shape:", main_df.shape)
+
                 # 受注残(前日データ)からの追加
                 if '受注残(前日データ)' in wb.sheetnames:
                     prev_df = pd.DataFrame(wb['受注残(前日データ)'].values)
