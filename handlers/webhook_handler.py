@@ -233,6 +233,8 @@ def handle_webhook(request):
                 ws_juchu = wb.create_sheet('受注残')
                 ws_juchu.append(list(remaining_df.columns))
                 for row in remaining_df.itertuples(index=False, name=None):
+                    if all([cell is None or str(cell).strip() == "" for cell in row]):
+                        continue
                     ws_juchu.append(row)
 
                 # --- 注文残シート ---
