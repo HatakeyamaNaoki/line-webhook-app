@@ -88,7 +88,9 @@ def handle_webhook(request):
         if user_text == '集計サマリ作成':
             try:
                 openai_client = OpenAI()
-                df = pd.read_excel(file_path)
+                today = datetime.now(JST).strftime('%Y%m%d')
+                sheet_name = f'集計結果_{today}'
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
                 print("サマリ作成前ファイル読み込み 行数:", len(df))
                 df_norm = normalize_df(df, openai_client)
                 print("normalize_df後 行数:", len(df_norm))
