@@ -236,6 +236,9 @@ def handle_webhook(request):
                     prev_df = pd.DataFrame(wb['受注残(前日データ)'].values)
                     prev_df.columns = prev_df.iloc[0]
                     prev_df = prev_df[1:]
+                    prev_df = prev_df.loc[:, prev_df.columns.notna() & (prev_df.columns != "None")]
+                    prev_df.columns = prev_df.columns.map(lambda x: str(x).strip())
+                    prev_df = prev_df.loc[:, ~prev_df.columns.duplicated()]
                     print("【受注残/前日】prev_df.columns(list):", list(prev_df.columns))
                     print("【受注残/前日】prev_df.columns重複:", prev_df.columns[prev_df.columns.duplicated()])
                     print("【受注残/前日】prev_df.index重複:", prev_df.index[prev_df.index.duplicated()])
