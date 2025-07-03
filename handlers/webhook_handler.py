@@ -134,39 +134,6 @@ def handle_webhook(request):
             return 'OK', 200
 
         # =====================
-        # 受注残作成
-        # =====================
-        if user_text == '受注残作成':
-            try:
-                df = pd.read_excel(file_path, sheet_name=None)
-                main_sheet_name = list(df.keys())[0]  # 1枚目のシート
-                main_df = df[main_sheet_name]
-
-                # 納品希望日が翌日以降（必ずstr型で比較する！）
-                tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
-                remaining_df = main_df[main_df['納品希望日'].apply(
-                    lambda x: str(x).isdigit() and str(x) >= tomorrow
-                )]
-
-                wb = load_workbook(file_path)
-                if '受注残' in wb.sheetnames:
-                    ws = wb['受注残']
-                    wb.remove(ws)
-                ws = wb.create_sheet('受注残')
-                ws.append(main_df.columns.tolist())
-                for row in remaining_df.itertuples(index=False, name=None):
-                    ws.append(row)
-                wb.save(file_path)
-
-                # 再アップロード
-                media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                drive_service.files().update(fileId=file_id, media_body=media).execute()
-                print("受注残シート作成＆Drive再アップロード完了！")
-            except Exception as e:
-                print(f"受注残作成またはDriveアップロードエラー: {e}")
-            return 'OK', 200
-
-        # =====================
         # 発注リスト作成
         # =====================
         if user_text == '発注リスト作成':
@@ -218,20 +185,46 @@ def handle_webhook(request):
             return 'OK', 200
 
         # =====================
-        # 発注残シート作成
+        # 受注残＋発注残シート同時作成
         # =====================
-        if user_text == '発注残作成':
+        if user_text == '受注残と発注残の作成':
             try:
+                # ---- 受注残 ----
+                df = pd.read_excel(file_path, sheet_name=None)
+                main_sheet_name = list(df.keys())[0]  # 1枚目のシート
+                main_df = df[main_sheet_name]
+
+                # 納品希望日が翌日以降（必ずstr型で比較する！）
+                tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
+                remaining_df = main_df[main_df['納品希望日'].apply(
+                    lambda x: str(x).isdigit() and str(x) >= tomorrow
+                )]
+
+                wb = load_workbook(file_path)
+                # 受注残シート
+                if '受注残' in wb.sheetnames:
+                    ws = wb['受注残']
+                    wb.remove(ws)
+                ws_juchu = wb.create_sheet('受注残')
+                ws_juchu.append(main_df.columns.tolist())
+                for row in remaining_df.itertuples(index=False, name=None):
+                    ws_juchu.append(row)
+
+                # ---- 発注残（注文残）----
                 ok = create_order_remains_sheet(file_path)
                 if not ok:
                     print("発注残作成に失敗")
-                    return 'OK', 200
-                # 再アップロード
+                    # 受注残だけでもDriveアップロードは続行
+                else:
+                    print("注文残シート作成成功")
+
+                wb.save(file_path) 
+                # 再アップロード（必ず一度だけ）
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().update(fileId=file_id, media_body=media).execute()
-                print("注文残シート作成＆Drive再アップロード完了！")
+                print("受注残・発注残シート作成＆Drive再アップロード完了！")
             except Exception as e:
-                print(f"発注残作成またはDriveアップロードエラー: {e}")
+                print(f"受注残・発注残作成またはDriveアップロードエラー: {e}")
             return 'OK', 200
 
         # =====================
