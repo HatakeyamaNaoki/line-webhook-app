@@ -14,6 +14,7 @@ from .prompt_templates import normalize_product_name_prompt
 import re
 import shutil
 from handlers.file_handler import get_or_create_folder
+from openpyxl.utils import get_column_letter
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
