@@ -194,6 +194,7 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     for f in files:
         print(f"【デバッグ】指定親: ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '?'}")
 
+    main_sheet_name = f'集計結果_{today}'
     if files:
         file_id = files[0]['id']
         request = drive_service.files().get_media(fileId=file_id)
@@ -203,8 +204,13 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
         while not done:
             status, done = downloader.next_chunk()
         fh.seek(0)
-        existing = pd.read_excel(fh)
-        combined = pd.concat([existing, new_data], ignore_index=True)
+        # 全シート読み込み
+        xl = pd.read_excel(fh, sheet_name=None)
+        if main_sheet_name in xl:
+            existing = xl[main_sheet_name]
+            combined = pd.concat([existing, new_data], ignore_index=True)
+        else:
+            combined = new_data
     else:
         combined = new_data
 
