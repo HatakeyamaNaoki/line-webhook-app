@@ -113,14 +113,17 @@ def handle_webhook(request):
         if user_text == 'ピッキングリスト作成':
             try:
                 df = pd.read_excel(file_path, sheet_name=None)
-                main_sheet_name = list(df.keys())[0]  # 1枚目のシート
+                main_sheet_name = f"集計結果_{today}"
+                if main_sheet_name not in df:
+                    # なければ1枚目 fallback（旧方式）なども可
+                    print(f"{main_sheet_name} シートがありません。既存シートを利用します")
+                    main_sheet_name = list(df.keys())[0]
                 main_df = df[main_sheet_name]
 
                 # 本日納品希望分だけ
                 pick_df = main_df[main_df['納品希望日'].astype(str) == today]
 
                 # --- 受注残(前日データ)も存在すれば追加 ---
-                prev_juchu_sheet = None
                 if '受注残(前日データ)' in df:
                     prev_juchu_df = df['受注残(前日データ)']
                     # カラム名が0行目になっていれば修正（Excel/Pandas由来でズレることあり）
