@@ -216,7 +216,7 @@ def handle_webhook(request):
                 tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
 
                 # --- 受注残シート ---
-                main_sheet_name = wb.sheetnames[0]
+                main_sheet_name = f"集計結果_{today}"
                 main_df = pd.DataFrame(wb[main_sheet_name].values)
                 main_df.columns = main_df.iloc[0]
                 main_df = main_df[1:]
