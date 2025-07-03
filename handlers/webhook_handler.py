@@ -220,7 +220,9 @@ def handle_webhook(request):
                 main_df = pd.DataFrame(wb[main_sheet_name].values)
                 main_df.columns = main_df.iloc[0]
                 main_df = main_df[1:]
+                main_df.columns = main_df.columns.map(lambda x: str(x).strip())
                 main_df = main_df.loc[:, ~main_df.columns.duplicated()]
+                print("main_df.columns:", list(main_df.columns))
                 remaining_df = main_df[main_df['納品希望日'].astype(str) >= tomorrow]
 
                 # 受注残(前日データ)からの追加
