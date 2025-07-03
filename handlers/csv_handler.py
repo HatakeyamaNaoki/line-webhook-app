@@ -13,6 +13,7 @@ from openai import OpenAI  # 新しいOpenAIクライアント
 from .prompt_templates import normalize_product_name_prompt
 import re
 import shutil
+from handlers.file_handler import get_or_create_folder
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
@@ -529,6 +530,9 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     # 日付文字列
     from datetime import datetime, timedelta
     JST = pytz.timezone('Asia/Tokyo')
+    today = datetime.now(JST)
+    yesterday = today - timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y%m%d')
     prev_dt = datetime.strptime(today_str, "%Y%m%d") - timedelta(days=1)
     prev_str = prev_dt.strftime("%Y%m%d")
 
@@ -537,7 +541,10 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     prev_xlsx  = f"集計結果_{prev_str}.xlsx"
 
     # --- 前日ファイルDL
-    prev_query = f"name = '{prev_xlsx}' and '{csv_folder_id}' in parents and trashed = false"
+    root_id = get_or_create_folder('受注集計')
+    yesterday_folder_id = get_or_create_folder(yesterday_str, parent_id=root_id)
+    csv_folder_id_yesterday = get_or_create_folder('集計結果', parent_id=yesterday_folder_id)
+    prev_query = f"name = '{prev_xlsx}' and '{csv_folder_id_yesterday}' in parents and trashed = false"
     prev_response = drive_service.files().list(q=prev_query, fields='files(id)').execute()
     prev_files = prev_response.get('files', [])
     if not prev_files:
