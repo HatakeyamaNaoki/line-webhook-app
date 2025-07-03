@@ -293,6 +293,8 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
     ws_summary.append(list(summary.columns))
     for row in summary.itertuples(index=False, name=None):
         ws_summary.append(row)
+    for ws in wb.worksheets:
+        autofit_columns(ws)
     wb.save(xlsx_path)
     print(f"集計結果サマリシート付きで {xlsx_path} を作成しました")
 
@@ -368,7 +370,8 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     ws_order.append(order_headers)
     for r in order_list:
         ws_order.append(list(r))
-
+    for ws in wb.worksheets:
+        autofit_columns(ws)
     wb.save(xlsx_path)
     return True
 
@@ -581,6 +584,8 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
             print(f"前日ファイルに{src_name}シートがありません")
 
     # --- 保存・再アップロード
+    for ws in today_wb.worksheets:
+        autofit_columns(ws)
     today_wb.save(today_tmp_path)
     media = MediaFileUpload(today_tmp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     if today_files:
@@ -590,3 +595,17 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
         drive_service.files().create(body=file_metadata, media_body=media).execute()
     print("前日データ移行シートを作成・アップロード完了")
     return True
+
+def autofit_columns(ws):
+    for col in ws.columns:
+        max_length = 0
+        column = get_column_letter(col[0].column)
+        for cell in col:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        # ちょっと余裕を持たせる
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column].width = adjusted_width

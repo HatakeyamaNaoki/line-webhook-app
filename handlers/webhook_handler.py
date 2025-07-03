@@ -6,6 +6,7 @@ from handlers.csv_handler import (
     normalize_df,
     create_order_list_sheet,
     create_order_sheets,       # ← 注文書自動作成
+    autofit_columns,
 )
 from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -19,6 +20,7 @@ from openpyxl import load_workbook
 from openai import OpenAI
 import requests
 from handlers.csv_handler import migrate_prev_day_sheets_to_today
+from openpyxl.utils import get_column_letter
 
 def handle_webhook(request):
     data = request.get_json()
@@ -122,6 +124,8 @@ def handle_webhook(request):
                 ws.append(main_df.columns.tolist())
                 for row in pick_df.itertuples(index=False, name=None):
                     ws.append(row)
+                for ws in wb.worksheets:
+                    autofit_columns(ws)
                 wb.save(file_path)
 
                 # 再アップロード
@@ -214,7 +218,8 @@ def handle_webhook(request):
                     print("発注残作成に失敗")
                 else:
                     print("注文残シート作成成功")
-
+                for ws in wb.worksheets:
+                    autofit_columns(ws)
                 wb.save(file_path)
                 # 再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
