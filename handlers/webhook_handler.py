@@ -18,7 +18,6 @@ from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openai import OpenAI
 import requests
-from handlers.csv_handler import create_order_remains_sheet
 from handlers.csv_handler import migrate_prev_day_sheets_to_today
 
 def handle_webhook(request):
@@ -189,37 +188,35 @@ def handle_webhook(request):
         # =====================
         if user_text == '受注残と発注残の作成':
             try:
-                # ---- 受注残 ----
-                df = pd.read_excel(file_path, sheet_name=None)
-                main_sheet_name = list(df.keys())[0]  # 1枚目のシート
-                main_df = df[main_sheet_name]
+                wb = load_workbook(file_path)
 
-                # 納品希望日が翌日以降（必ずstr型で比較する！）
+                # 受注残シート（従来通り）
+                main_sheet_name = wb.sheetnames[0]
+                main_df = pd.DataFrame(wb[main_sheet_name].values)
+                main_df.columns = main_df.iloc[0]
+                main_df = main_df[1:]
                 tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
                 remaining_df = main_df[main_df['納品希望日'].apply(
                     lambda x: str(x).isdigit() and str(x) >= tomorrow
                 )]
 
-                wb = load_workbook(file_path)
-                # 受注残シート
                 if '受注残' in wb.sheetnames:
-                    ws = wb['受注残']
-                    wb.remove(ws)
+                    del wb['受注残']
                 ws_juchu = wb.create_sheet('受注残')
-                ws_juchu.append(main_df.columns.tolist())
+                ws_juchu.append(list(main_df.columns))
                 for row in remaining_df.itertuples(index=False, name=None):
                     ws_juchu.append(row)
 
-                # ---- 発注残（注文残）----
-                ok = create_order_remains_sheet(file_path)
+                # 注文残シート（ワークブックを渡す）
+                from handlers.csv_handler import create_order_remains_sheet_from_wb
+                ok = create_order_remains_sheet_from_wb(wb)
                 if not ok:
                     print("発注残作成に失敗")
-                    # 受注残だけでもDriveアップロードは続行
                 else:
                     print("注文残シート作成成功")
 
-                wb.save(file_path) 
-                # 再アップロード（必ず一度だけ）
+                wb.save(file_path)
+                # 再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().update(fileId=file_id, media_body=media).execute()
                 print("受注残・発注残シート作成＆Drive再アップロード完了！")

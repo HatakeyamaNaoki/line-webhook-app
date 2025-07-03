@@ -477,51 +477,34 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
 
     return True
 
-def create_order_remains_sheet(xlsx_path):
-    """
-    「注文リスト」シートから翌日以降の納品希望分のみを「注文残」シートに転記
-    """
-    import pandas as pd
-    from openpyxl import load_workbook
-
-    # シートをロード
-    wb = load_workbook(xlsx_path)
-    if "注文リスト" not in wb.sheetnames:
-        print("注文リストシートがありません")
-        return False
-
-    ws = wb["注文リスト"]
-    df = pd.DataFrame(ws.values)
-    df.columns = df.iloc[0]
-    df = df[1:]
-
-    # 日付の判定
-    from datetime import datetime, timedelta
-    JST = pytz.timezone('Asia/Tokyo')
-    tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime("%Y%m%d")
-
-    # 「納品希望日」が明日以降だけピックアップ
-    def is_next_day_or_later(s):
-        # "YYYYMMDD" or "YYYY/MM/DD" or "YYYY-MM-DD"対応
-        s = str(s)
-        if not s or s.lower() in ["nan", "none"]:
+def create_order_remains_sheet_from_wb(wb):
+    try:
+        if "注文リスト" not in wb.sheetnames:
+            print("注文リストシートがありません")
             return False
-        s_num = s.replace("/", "").replace("-", "")
-        return s_num.isdigit() and s_num >= tomorrow
+        ws_order = wb["注文リスト"]
+        import pandas as pd
+        df = pd.DataFrame(ws_order.values)
+        df.columns = df.iloc[0]
+        df = df[1:]
+        # 翌日以降のもの
+        from datetime import datetime, timedelta
+        JST = pytz.timezone('Asia/Tokyo')
+        tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
+        order_remains = df[df['納品希望日'].apply(lambda x: str(x).isdigit() and str(x) >= tomorrow)]
 
-    remains_df = df[df["納品希望日"].apply(is_next_day_or_later)]
-
-    # 既存シート削除（あれば）
-    if "注文残" in wb.sheetnames:
-        del wb["注文残"]
-    ws_remain = wb.create_sheet("注文残")
-    ws_remain.append(list(df.columns))
-    for row in remains_df.itertuples(index=False, name=None):
-        ws_remain.append(row)
-
-    wb.save(xlsx_path)
-    print(f"注文残シートを作成: {xlsx_path}")
-    return True
+        # シート上書き
+        if "注文残" in wb.sheetnames:
+            del wb["注文残"]
+        ws_remains = wb.create_sheet("注文残")
+        ws_remains.append(list(df.columns))
+        for row in order_remains.itertuples(index=False, name=None):
+            ws_remains.append(row)
+        print(f"注文残シートを作成: {wb.properties.title or ''}")
+        return True
+    except Exception as e:
+        print(f"注文残シート作成エラー: {e}")
+        return False
 
 def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     """
