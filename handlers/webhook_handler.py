@@ -205,35 +205,73 @@ def handle_webhook(request):
         if user_text == '受注残と発注残の作成':
             try:
                 wb = load_workbook(file_path)
+                JST = pytz.timezone('Asia/Tokyo')
+                tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
 
-                # 受注残シート（従来通り）
+                # --- 受注残シート ---
                 main_sheet_name = wb.sheetnames[0]
                 main_df = pd.DataFrame(wb[main_sheet_name].values)
                 main_df.columns = main_df.iloc[0]
                 main_df = main_df[1:]
-                tomorrow = (datetime.now(JST) + timedelta(days=1)).strftime('%Y%m%d')
-                remaining_df = main_df[main_df['納品希望日'].apply(
-                    lambda x: str(x).isdigit() and str(x) >= tomorrow
-                )]
+                remaining_df = main_df[main_df['納品希望日'].astype(str) >= tomorrow]
 
+                # 受注残(前日データ)からの追加
+                if '受注残(前日データ)' in wb.sheetnames:
+                    prev_df = pd.DataFrame(wb['受注残(前日データ)'].values)
+                    prev_df.columns = prev_df.iloc[0]
+                    prev_df = prev_df[1:]
+                    # カラム揃え
+                    prev_df = prev_df.reindex(columns=remaining_df.columns, fill_value="")
+                    prev_add_df = prev_df[prev_df['納品希望日'].astype(str) >= tomorrow]
+                    # 合体
+                    remaining_df = pd.concat([remaining_df, prev_add_df], ignore_index=True)
+                    remaining_df = remaining_df.drop_duplicates()
+
+                # 受注残シート作成
                 if '受注残' in wb.sheetnames:
                     del wb['受注残']
                 ws_juchu = wb.create_sheet('受注残')
-                ws_juchu.append(list(main_df.columns))
+                ws_juchu.append(list(remaining_df.columns))
                 for row in remaining_df.itertuples(index=False, name=None):
                     ws_juchu.append(row)
 
-                # 注文残シート（ワークブックを渡す）
+                # --- 注文残シート ---
+                # まず既存ロジックで作成
                 from handlers.csv_handler import create_order_remains_sheet_from_wb
                 ok = create_order_remains_sheet_from_wb(wb)
                 if not ok:
                     print("発注残作成に失敗")
                 else:
                     print("注文残シート作成成功")
+
+                # 注文残(前日データ)からの追加
+                if '注文残(前日データ)' in wb.sheetnames and '注文残' in wb.sheetnames:
+                    order_zan_ws = wb['注文残']
+                    # Pandasで加工
+                    order_zan_df = pd.DataFrame(order_zan_ws.values)
+                    order_zan_df.columns = order_zan_df.iloc[0]
+                    order_zan_df = order_zan_df[1:]
+                    prev_df = pd.DataFrame(wb['注文残(前日データ)'].values)
+                    prev_df.columns = prev_df.iloc[0]
+                    prev_df = prev_df[1:]
+                    prev_df = prev_df.reindex(columns=order_zan_df.columns, fill_value="")
+                    prev_add_df = prev_df[prev_df['納品希望日'].astype(str) >= tomorrow]
+                    # 合体
+                    order_zan_df = pd.concat([order_zan_df, prev_add_df], ignore_index=True)
+                    order_zan_df = order_zan_df.drop_duplicates()
+                    # シートを一度消して作り直し
+                    del wb['注文残']
+                    ws_oj = wb.create_sheet('注文残')
+                    ws_oj.append(list(order_zan_df.columns))
+                    for row in order_zan_df.itertuples(index=False, name=None):
+                        ws_oj.append(row)
+
+                # 列幅自動調整
                 for ws in wb.worksheets:
                     autofit_columns(ws)
                 wb.save(file_path)
-                # 再アップロード
+
+                # Drive再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().update(fileId=file_id, media_body=media).execute()
                 print("受注残・発注残シート作成＆Drive再アップロード完了！")
