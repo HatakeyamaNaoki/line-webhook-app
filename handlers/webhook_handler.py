@@ -115,13 +115,25 @@ def handle_webhook(request):
                 # 本日納品希望分だけ
                 pick_df = main_df[main_df['納品希望日'].astype(str) == today]
 
+                # --- 受注残(前日データ)も存在すれば追加 ---
+                prev_juchu_sheet = None
+                if '受注残(前日データ)' in df:
+                    prev_juchu_df = df['受注残(前日データ)']
+                    # カラム名が0行目になっていれば修正（Excel/Pandas由来でズレることあり）
+                    if not isinstance(prev_juchu_df.columns[0], str):
+                        prev_juchu_df.columns = prev_juchu_df.iloc[0]
+                        prev_juchu_df = prev_juchu_df[1:]
+                    prev_pick_df = prev_juchu_df[prev_juchu_df['納品希望日'].astype(str) == today]
+                    # 本体とマージ
+                    pick_df = pd.concat([pick_df, prev_pick_df], ignore_index=True)
+
                 wb = load_workbook(file_path)
                 # すでに存在すれば削除
                 if 'ピッキングリスト' in wb.sheetnames:
                     ws = wb['ピッキングリスト']
                     wb.remove(ws)
                 ws = wb.create_sheet('ピッキングリスト')
-                ws.append(main_df.columns.tolist())
+                ws.append(list(main_df.columns))  # 1行目
                 for row in pick_df.itertuples(index=False, name=None):
                     ws.append(row)
                 for ws in wb.worksheets:
