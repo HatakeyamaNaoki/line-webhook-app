@@ -284,16 +284,33 @@ def xlsx_with_summary_update(df, xlsx_path, openai_client):
     summary = summary.sort_values('商品名')
 
     # --- xlsx出力 ---
-    wb = Workbook()
-    ws_raw = wb.active
-    ws_raw.title = os.path.splitext(os.path.basename(xlsx_path))[0]
+    # 既存ファイルがあれば読み込み、なければ新規
+    try:
+        wb = load_workbook(xlsx_path)
+    except Exception:
+        wb = Workbook()
+        if 'Sheet' in wb.sheetnames:
+            del wb['Sheet']
+
+    # 元データシート名（例: ファイル名拡張子抜き）
+    raw_sheet_name = os.path.splitext(os.path.basename(xlsx_path))[0]
+    if raw_sheet_name in wb.sheetnames:
+        del wb[raw_sheet_name]
+
+    ws_raw = wb.create_sheet(raw_sheet_name)
     ws_raw.append(list(df_norm.columns.drop('集計キー')))
     for row in df_norm.drop(columns=['集計キー']).itertuples(index=False, name=None):
         ws_raw.append(row)
+
+    # サマリシート
+    if "集計結果サマリ" in wb.sheetnames:
+        del wb["集計結果サマリ"]
     ws_summary = wb.create_sheet("集計結果サマリ")
     ws_summary.append(list(summary.columns))
     for row in summary.itertuples(index=False, name=None):
         ws_summary.append(row)
+
+    # 列幅自動調整（autofit_columnsがあれば）
     for ws in wb.worksheets:
         autofit_columns(ws)
     wb.save(xlsx_path)
