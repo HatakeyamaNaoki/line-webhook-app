@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from openpyxl import load_workbook
 from openai import OpenAI
 import requests
+from handlers.csv_handler import create_order_remains_sheet
 
 def handle_webhook(request):
     data = request.get_json()
@@ -213,6 +214,23 @@ def handle_webhook(request):
                 print("注文書自動作成完了！")
             except Exception as e:
                 print(f"注文書作成エラー: {e}")
+            return 'OK', 200
+
+        # =====================
+        # 発注残シート作成
+        # =====================
+        if user_text == '発注残作成':
+            try:
+                ok = create_order_remains_sheet(file_path)
+                if not ok:
+                    print("発注残作成に失敗")
+                    return 'OK', 200
+                # 再アップロード
+                media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                print("注文残シート作成＆Drive再アップロード完了！")
+            except Exception as e:
+                print(f"発注残作成またはDriveアップロードエラー: {e}")
             return 'OK', 200
 
         # --- 通常テキスト（注文等）は既存ハンドラへ ---
