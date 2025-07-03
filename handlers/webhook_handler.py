@@ -89,7 +89,9 @@ def handle_webhook(request):
             try:
                 openai_client = OpenAI()
                 df = pd.read_excel(file_path)
+                print("サマリ作成前ファイル読み込み 行数:", len(df))
                 df_norm = normalize_df(df, openai_client)
+                print("normalize_df後 行数:", len(df_norm))
                 xlsx_with_summary_update(df_norm, file_path, openai_client)
                 print(f"集計サマリ作成のみ実施: {file_path}")
 
