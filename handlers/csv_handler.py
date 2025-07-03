@@ -598,15 +598,15 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     return True
 
 def autofit_columns(ws):
-    for col in ws.columns:
+    for column in ws.columns:
         max_length = 0
-        column = get_column_letter(col[0].column)
-        for cell in col:
+        column = list(column)
+        for cell in column:
             try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
+                cell_length = len(str(cell.value)) if cell.value is not None else 0
+                if cell_length > max_length:
+                    max_length = cell_length
             except:
                 pass
-        # ちょっと余裕を持たせる
-        adjusted_width = (max_length + 2) * 2
-        ws.column_dimensions[column].width = adjusted_width
+        adjusted_width = ( max_length + 2 ) * 2  # 余白も考慮
+        ws.column_dimensions[get_column_letter(column[0].column)].width = adjusted_width
