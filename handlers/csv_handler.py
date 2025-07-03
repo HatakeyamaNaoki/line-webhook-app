@@ -608,5 +608,5 @@ def autofit_columns(ws):
             except:
                 pass
         # ちょっと余裕を持たせる
-        adjusted_width = (max_length + 2)
+        adjusted_width = (max_length + 2) * 2
         ws.column_dimensions[column].width = adjusted_width
