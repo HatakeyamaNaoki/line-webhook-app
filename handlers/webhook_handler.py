@@ -19,6 +19,7 @@ from openpyxl import load_workbook
 from openai import OpenAI
 import requests
 from handlers.csv_handler import create_order_remains_sheet
+from handlers.csv_handler import migrate_prev_day_sheets_to_today
 
 def handle_webhook(request):
     data = request.get_json()
@@ -231,6 +232,20 @@ def handle_webhook(request):
                 print("注文残シート作成＆Drive再アップロード完了！")
             except Exception as e:
                 print(f"発注残作成またはDriveアップロードエラー: {e}")
+            return 'OK', 200
+
+        # =====================
+        # 発注残・注文残の前日データ移行
+        # =====================
+        if user_text == '受注残と発注残の前日データ移行':
+            try:
+                ok = migrate_prev_day_sheets_to_today(csv_folder_id, today, drive_service)
+                if not ok:
+                    print("前日データ移行に失敗")
+                    return 'OK', 200
+                print("前日データ移行完了！")
+            except Exception as e:
+                print(f"前日データ移行エラー: {e}")
             return 'OK', 200
 
         # --- 通常テキスト（注文等）は既存ハンドラへ ---

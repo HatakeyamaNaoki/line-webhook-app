@@ -521,3 +521,82 @@ def create_order_remains_sheet(xlsx_path):
     wb.save(xlsx_path)
     print(f"注文残シートを作成: {xlsx_path}")
     return True
+
+def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
+    """
+    前日の「受注残」「注文残」シートを今日の集計エクセルに(前日データ)シートとして移行
+    """
+    # 日付文字列
+    from datetime import datetime, timedelta
+    JST = pytz.timezone('Asia/Tokyo')
+    prev_dt = datetime.strptime(today_str, "%Y%m%d") - timedelta(days=1)
+    prev_str = prev_dt.strftime("%Y%m%d")
+
+    # ファイル名定義
+    today_xlsx = f"集計結果_{today_str}.xlsx"
+    prev_xlsx  = f"集計結果_{prev_str}.xlsx"
+
+    # --- 前日ファイルDL
+    prev_query = f"name = '{prev_xlsx}' and '{csv_folder_id}' in parents and trashed = false"
+    prev_response = drive_service.files().list(q=prev_query, fields='files(id)').execute()
+    prev_files = prev_response.get('files', [])
+    if not prev_files:
+        print("前日分の集計結果ファイルがありません")
+        return False
+    prev_file_id = prev_files[0]['id']
+    prev_tmp_path = f"/tmp/{prev_xlsx}"
+    request_dl = drive_service.files().get_media(fileId=prev_file_id)
+    with open(prev_tmp_path, 'wb') as fh:
+        downloader = MediaIoBaseDownload(fh, request_dl)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+    prev_wb = load_workbook(prev_tmp_path)
+
+    # --- 当日ファイルDL or 新規作成
+    today_query = f"name = '{today_xlsx}' and '{csv_folder_id}' in parents and trashed = false"
+    today_response = drive_service.files().list(q=today_query, fields='files(id)').execute()
+    today_files = today_response.get('files', [])
+    today_tmp_path = f"/tmp/{today_xlsx}"
+
+    if today_files:
+        today_file_id = today_files[0]['id']
+        request_dl = drive_service.files().get_media(fileId=today_file_id)
+        with open(today_tmp_path, 'wb') as fh:
+            downloader = MediaIoBaseDownload(fh, request_dl)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+        today_wb = load_workbook(today_tmp_path)
+    else:
+        # 新規作成
+        today_wb = load_workbook(prev_tmp_path)  # 前日ファイルをコピーして新ファイルにしてもOK
+        # あるいは空ブックでも良いが、必要なシート名・ヘッダ構成に注意
+
+    # --- コピー対象シート
+    for src_name, dst_name in [("受注残", "受注残(前日データ)"), ("注文残", "注文残(前日データ)")]:
+        if src_name in prev_wb.sheetnames:
+            # 既存で当日側にあれば削除
+            if dst_name in today_wb.sheetnames:
+                std = today_wb[dst_name]
+                today_wb.remove(std)
+            ws_prev = prev_wb[src_name]
+            # データをリスト化
+            data = list(ws_prev.values)
+            # 新規シート作成
+            ws_today = today_wb.create_sheet(dst_name)
+            for row in data:
+                ws_today.append(row)
+        else:
+            print(f"前日ファイルに{src_name}シートがありません")
+
+    # --- 保存・再アップロード
+    today_wb.save(today_tmp_path)
+    media = MediaFileUpload(today_tmp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    if today_files:
+        drive_service.files().update(fileId=today_file_id, media_body=media).execute()
+    else:
+        file_metadata = {'name': today_xlsx, 'parents': [csv_folder_id]}
+        drive_service.files().create(body=file_metadata, media_body=media).execute()
+    print("前日データ移行シートを作成・アップロード完了")
+    return True
