@@ -514,6 +514,7 @@ def create_order_remains_sheet_from_wb(wb):
         df = pd.DataFrame(ws_order.values)
         df.columns = df.iloc[0]
         df = df[1:]
+        print("注文リスト（df）.columns:", list(df.columns))
         # 翌日以降のもの
         from datetime import datetime, timedelta
         JST = pytz.timezone('Asia/Tokyo')
