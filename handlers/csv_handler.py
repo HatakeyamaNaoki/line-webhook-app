@@ -514,12 +514,6 @@ def create_order_remains_sheet_from_wb(wb):
         df = pd.DataFrame(ws_order.values)
         df.columns = df.iloc[0]
         df = df[1:]
-        print("注文リスト（df）.columns:", list(df.columns))
-
-        print("【注文残】df.columns(list):", list(df.columns))
-        print("【注文残】df.columns重複:", df.columns[df.columns.duplicated()])
-        print("【注文残】df.index重複:", df.index[df.index.duplicated()])
-        print("【注文残】df.shape:", df.shape)
 
         # 翌日以降のもの
         from datetime import datetime, timedelta

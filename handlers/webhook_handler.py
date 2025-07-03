@@ -91,11 +91,8 @@ def handle_webhook(request):
                 today = datetime.now(JST).strftime('%Y%m%d')
                 sheet_name = f'集計結果_{today}'
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
-                print("サマリ作成前ファイル読み込み 行数:", len(df))
                 df_norm = normalize_df(df, openai_client)
-                print("normalize_df後 行数:", len(df_norm))
                 xlsx_with_summary_update(df_norm, file_path, openai_client)
-                print(f"集計サマリ作成のみ実施: {file_path}")
 
                 # 再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -223,13 +220,7 @@ def handle_webhook(request):
                 main_df = main_df.loc[:, main_df.columns.notna() & (main_df.columns != "None")]
                 main_df.columns = main_df.columns.map(lambda x: str(x).strip())
                 main_df = main_df.loc[:, ~main_df.columns.duplicated()]
-                print("main_df.columns:", list(main_df.columns))
                 remaining_df = main_df[main_df['納品希望日'].astype(str) >= tomorrow]
-
-                print("【受注残】main_df.columns(list):", list(main_df.columns))
-                print("【受注残】main_df.columns重複:", main_df.columns[main_df.columns.duplicated()])
-                print("【受注残】main_df.index重複:", main_df.index[main_df.index.duplicated()])
-                print("【受注残】main_df.shape:", main_df.shape)
 
                 # 受注残(前日データ)からの追加
                 if '受注残(前日データ)' in wb.sheetnames:
@@ -239,18 +230,11 @@ def handle_webhook(request):
                     prev_df = prev_df.loc[:, prev_df.columns.notna() & (prev_df.columns != "None")]
                     prev_df.columns = prev_df.columns.map(lambda x: str(x).strip())
                     prev_df = prev_df.loc[:, ~prev_df.columns.duplicated()]
-                    print("【受注残/前日】prev_df.columns(list):", list(prev_df.columns))
-                    print("【受注残/前日】prev_df.columns重複:", prev_df.columns[prev_df.columns.duplicated()])
-                    print("【受注残/前日】prev_df.index重複:", prev_df.index[prev_df.index.duplicated()])
-                    print("【受注残/前日】prev_df.shape:", prev_df.shape)
                     # カラム揃え
                     prev_df = prev_df.reindex(columns=remaining_df.columns, fill_value="")
                     prev_add_df = prev_df[prev_df['納品希望日'].astype(str) >= tomorrow]
                     # 合体
                     remaining_df = pd.concat([remaining_df, prev_add_df], ignore_index=True)
-                    print("【受注残】remaining_df.columns:", list(remaining_df.columns))
-                    print("【受注残】remaining_df.columns重複:", remaining_df.columns[remaining_df.columns.duplicated()])
-                    print("【受注残】remaining_df.shape:", remaining_df.shape)
                     remaining_df = remaining_df.drop_duplicates()
 
                 # 受注残シート作成
@@ -279,20 +263,12 @@ def handle_webhook(request):
                     order_zan_df = pd.DataFrame(order_zan_ws.values)
                     order_zan_df.columns = order_zan_df.iloc[0]
                     order_zan_df = order_zan_df[1:]
-                    print("【注文残】order_zan_df.columns(list):", list(order_zan_df.columns))
-                    print("【注文残】order_zan_df.columns重複:", order_zan_df.columns[order_zan_df.columns.duplicated()])
-                    print("【注文残】order_zan_df.index重複:", order_zan_df.index[order_zan_df.index.duplicated()])
-                    print("【注文残】order_zan_df.shape:", order_zan_df.shape)
                     prev_df = pd.DataFrame(wb['注文残(前日データ)'].values)
                     prev_df.columns = prev_df.iloc[0]
                     prev_df = prev_df[1:]
                     prev_df = prev_df.loc[:, prev_df.columns.notna() & (prev_df.columns != "None")]
                     prev_df.columns = prev_df.columns.map(lambda x: str(x).strip())
                     prev_df = prev_df.loc[:, ~prev_df.columns.duplicated()]
-                    print("【注文残/前日】prev_df.columns(list):", list(prev_df.columns))
-                    print("【注文残/前日】prev_df.columns重複:", prev_df.columns[prev_df.columns.duplicated()])
-                    print("【注文残/前日】prev_df.index重複:", prev_df.index[prev_df.index.duplicated()])
-                    print("【注文残/前日】prev_df.shape:", prev_df.shape)
                     prev_df = prev_df.reindex(columns=order_zan_df.columns, fill_value="")
                     prev_add_df = prev_df[prev_df['納品希望日'].astype(str) >= tomorrow]
                     # 合体
