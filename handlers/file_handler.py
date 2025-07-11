@@ -27,9 +27,11 @@ def get_or_create_folder(folder_name, parent_id=None):
         driveId=SHARED_DRIVE_ID
     ).execute()
     files = response.get('files', [])
+    print(f"[DEBUG] filesの中身: {files}")
     if files:
+        print(f"[DEBUG] 既存フォルダのID: {files[0]['id']}")
         return files[0]['id']
-
+    print("[DEBUG] フォルダ新規作成します")
     file_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
     if parent_id:
         file_metadata['parents'] = [parent_id]
