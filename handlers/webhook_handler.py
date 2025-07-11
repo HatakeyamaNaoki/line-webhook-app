@@ -10,7 +10,7 @@ from handlers.csv_handler import (
 )
 from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-from config import CSV_FORMAT_PATH
+from config import CSV_FORMAT_PATH, SHARED_DRIVE_ID
 
 import os
 import pytz
@@ -50,7 +50,14 @@ def handle_webhook(request):
 
         # Drive内でファイルを検索
         query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
-        response = drive_service.files().list(q=query, fields='files(id)').execute()
+        response = drive_service.files().list(
+            q=query,
+            fields='files(id)',
+            driveId=SHARED_DRIVE_ID,
+            corpora='drive',
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
+        ).execute()
         files = response.get('files', [])
         if not files:
             print("集計ファイルが見つかりません")
@@ -60,10 +67,17 @@ def handle_webhook(request):
             media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             file_metadata = {'name': filename, 'parents': [csv_folder_id]}
             drive_service.files().create(
-                body=file_metadata, media_body=media, fields='id'
+                body=file_metadata, media_body=media, fields='id', supportsAllDrives=True
             ).execute()
             print("空の集計ファイルを新規作成しアップロードしました")
-            response = drive_service.files().list(q=query, fields='files(id)').execute()
+            response = drive_service.files().list(
+                q=query,
+                fields='files(id)',
+                driveId=SHARED_DRIVE_ID,
+                corpora='drive',
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True
+            ).execute()
             files = response.get('files', [])
             if not files:
                 print("空ファイル作成後も取得できません")
@@ -96,7 +110,7 @@ def handle_webhook(request):
 
                 # 再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                drive_service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                 print(f"サマリ生成後にDriveへ再アップロード完了: {filename}")
 
             except Exception as e:
@@ -146,7 +160,7 @@ def handle_webhook(request):
 
                 # 再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                drive_service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                 print("ピッキングリスト作成＆Drive再アップロード完了！")
             except Exception as e:
                 print(f"ピッキングリスト作成またはDriveアップロードエラー: {e}")
@@ -161,7 +175,14 @@ def handle_webhook(request):
                 print(f"[DEBUG] root_id: {root_id}")
                 tag_query = f"name = 'タグ付け表.xlsx' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
-                tag_response = drive_service.files().list(q=tag_query, fields='files(id)').execute()
+                tag_response = drive_service.files().list(
+                    q=tag_query,
+                    fields='files(id)',
+                    driveId=SHARED_DRIVE_ID,
+                    corpora='drive',
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True
+                ).execute()
                 tag_files = tag_response.get('files', [])
                 if not tag_files:
                     print("タグ付け表.xlsxが見つかりません")
@@ -182,7 +203,7 @@ def handle_webhook(request):
 
                 # Drive再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                drive_service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                 print("注文リスト作成＆Drive再アップロード完了！")
 
             except Exception as e:
@@ -288,7 +309,7 @@ def handle_webhook(request):
 
                 # Drive再アップロード
                 media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                drive_service.files().update(fileId=file_id, media_body=media).execute()
+                drive_service.files().update(fileId=file_id, media_body=media, supportsAllDrives=True).execute()
                 print("受注残・発注残シート作成＆Drive再アップロード完了！")
             except Exception as e:
                 print(f"受注残・発注残作成またはDriveアップロードエラー: {e}")
@@ -334,7 +355,7 @@ def handle_webhook(request):
                 file_metadata = {'name': file_name, 'parents': [root_id]}
                 media = MediaFileUpload(temp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().create(
-                    body=file_metadata, media_body=media, fields='id'
+                    body=file_metadata, media_body=media, fields='id', supportsAllDrives=True
                 ).execute()
                 print("タグ付け表.xlsxをGoogleドライブにアップロードしました")
             except Exception as e:
@@ -357,7 +378,7 @@ def handle_webhook(request):
                 file_metadata = {'name': file_name, 'parents': [root_id]}
                 media = MediaFileUpload(temp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
                 drive_service.files().create(
-                    body=file_metadata, media_body=media, fields='id'
+                    body=file_metadata, media_body=media, fields='id', supportsAllDrives=True
                 ).execute()
                 print("注文書フォーマット.xlsxをGoogleドライブにアップロードしました")
             except Exception as e:

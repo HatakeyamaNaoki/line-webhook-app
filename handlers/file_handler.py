@@ -82,7 +82,9 @@ def save_text_to_drive(text, file_name, folder_id):
         f.write(text)
     file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='text/plain')
-    drive_service.files().create(body=file_metadata, media_body=media).execute()
+    drive_service.files().create(
+        body=file_metadata, media_body=media, supportsAllDrives=True
+    ).execute()
     os.remove(file_path)
 
 def save_pdf_to_drive(pdf_data, file_name, folder_id):
@@ -92,5 +94,7 @@ def save_pdf_to_drive(pdf_data, file_name, folder_id):
         f.write(pdf_data)
     file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='application/pdf')
-    drive_service.files().create(body=file_metadata, media_body=media).execute()
+    drive_service.files().create(
+        body=file_metadata, media_body=media, supportsAllDrives=True
+    ).execute()
     os.remove(file_path)
