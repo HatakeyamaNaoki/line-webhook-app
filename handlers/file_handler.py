@@ -37,6 +37,8 @@ def get_or_create_folder(folder_name, parent_id=None):
     folder = drive_service.files().create(
         body=file_metadata, fields='id', supportsAllDrives=True
     ).execute()
+    print("==== 作成したフォルダID ====")
+    print(folder['id'])
     return folder['id']
 
 def get_unique_filename(file_name, folder_id):
