@@ -10,9 +10,14 @@ credentials = service_account.Credentials.from_service_account_file(
 drive_service = build('drive', 'v3', credentials=credentials)
 
 def get_or_create_folder(folder_name, parent_id=None):
-    # 共有ドライブ直下のときは'root'指定
-    parent_clause = "'root' in parents" if not parent_id else f"'{parent_id}' in parents"
-
+    """
+    共有ドライブ内で「親ID」配下に同名フォルダがなければ新規作成し、そのIDを返す。
+    ・最上位（共有ドライブ直下）ならparent_id=None（自動でSHARED_DRIVE_IDになる）
+    ・それ以降は親フォルダのIDを渡す
+    """
+    # 共有ドライブ直下は'root'の代わりにSHARED_DRIVE_IDを親IDにする
+    actual_parent_id = parent_id if parent_id else SHARED_DRIVE_ID
+    parent_clause = f"'{actual_parent_id}' in parents"
     query = (
         f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' "
         f"and trashed = false and {parent_clause}"
@@ -24,7 +29,7 @@ def get_or_create_folder(folder_name, parent_id=None):
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
         corpora='drive',
-        driveId=SHARED_DRIVE_ID
+        driveId=SHARED_DRIVE_ID  # 必ず共有ドライブを限定！
     ).execute()
     files = response.get('files', [])
     print(f"[DEBUG] filesの中身: {files}")
@@ -32,12 +37,15 @@ def get_or_create_folder(folder_name, parent_id=None):
         print(f"[DEBUG] 既存フォルダのID: {files[0]['id']}")
         return files[0]['id']
     print("[DEBUG] フォルダ新規作成します")
-    file_metadata = {'name': folder_name, 'mimeType': 'application/vnd.google-apps.folder'}
-    if parent_id:
-        file_metadata['parents'] = [parent_id]
-    # supportsAllDrives必須！
+    file_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [actual_parent_id]
+    }
     folder = drive_service.files().create(
-        body=file_metadata, fields='id', supportsAllDrives=True
+        body=file_metadata,
+        fields='id',
+        supportsAllDrives=True
     ).execute()
     print("==== 作成したフォルダID ====")
     print(folder['id'])
