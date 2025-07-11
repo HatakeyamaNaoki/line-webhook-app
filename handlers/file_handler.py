@@ -10,7 +10,7 @@ credentials = service_account.Credentials.from_service_account_file(
 drive_service = build('drive', 'v3', credentials=credentials)
 
 try:
-    about = service.about().get(fields="user,kind").execute()
+    about = drive_service.about().get(fields="user,kind").execute()
     print("==== 認証成功！ユーザー情報 ====")
     print(about)
 except Exception as e:
