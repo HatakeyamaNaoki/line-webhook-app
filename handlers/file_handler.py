@@ -10,49 +10,37 @@ credentials = service_account.Credentials.from_service_account_file(
 drive_service = build('drive', 'v3', credentials=credentials)
 
 def get_or_create_folder(folder_name, parent_id=None):
-    # 共有ドライブ直下は"root"指定で作る
-    if parent_id is None or parent_id == SHARED_DRIVE_ID:
-        parent_clause = "'root' in parents"
-    else:
-        parent_clause = f"'{parent_id}' in parents"
+    # 共有ドライブ直下なら親は'root'
+    parent = 'root' if parent_id is None else parent_id
 
     query = (
         f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' "
-        f"and trashed = false and {parent_clause}"
+        f"and trashed = false and '{parent}' in parents"
     )
-    print(f"[DEBUG] クエリ: {query}")
     response = drive_service.files().list(
         q=query,
         fields='files(id, name)',
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
-        corpora='drive',
-        driveId=SHARED_DRIVE_ID
+        corpora='drive',  # 共有ドライブ検索時は必須
+        driveId=SHARED_DRIVE_ID,  # 共有ドライブのID
     ).execute()
     files = response.get('files', [])
-    print(f"[DEBUG] filesの中身: {files}")
     if files:
-        print(f"[DEBUG] 既存フォルダのID: {files[0]['id']}")
         return files[0]['id']
-    print("[DEBUG] フォルダ新規作成します")
+
+    # 新規作成（親指定忘れずに）
     file_metadata = {
         'name': folder_name,
         'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent]
     }
-    # 共有ドライブ直下は"root"、それ以外は親ID
-    if parent_id and parent_id != SHARED_DRIVE_ID:
-        file_metadata['parents'] = [parent_id]
-    else:
-        file_metadata['parents'] = ['root']
     folder = drive_service.files().create(
         body=file_metadata,
         fields='id',
         supportsAllDrives=True
     ).execute()
-    print("==== 作成したフォルダID ====")
-    print(folder['id'])
     return folder['id']
-
 
 def get_unique_filename(file_name, folder_id):
     """必ず_3桁連番（_001, _002...）でファイル名を返す"""
