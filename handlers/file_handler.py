@@ -1,6 +1,6 @@
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from config import SERVICE_ACCOUNT_FILE, SCOPES
+from config import SERVICE_ACCOUNT_FILE, SCOPES, SHARED_DRIVE_ID
 from google.oauth2 import service_account
 import os
 
