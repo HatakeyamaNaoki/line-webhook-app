@@ -9,6 +9,14 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
+try:
+    about = service.about().get(fields="user,kind").execute()
+    print("==== 認証成功！ユーザー情報 ====")
+    print(about)
+except Exception as e:
+    print("==== 認証エラー ====")
+    print(e)
+
 def get_or_create_folder(folder_name, parent_id=SHARED_DRIVE_ID):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:

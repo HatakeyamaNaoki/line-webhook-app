@@ -3,13 +3,6 @@ import os
 CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
-
-import json
-with open(SERVICE_ACCOUNT_FILE, "r", encoding="utf-8") as f:
-    data = json.load(f)
-print("==== サービスアカウントメール ====")
-print(data["client_email"])
-
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CSV_FORMAT_PATH = '集計フォーマット.csv'
 SHARED_DRIVE_ID = os.environ.get('SHARED_DRIVE_ID', '0AGgACoeUF81eUk9PVA')
