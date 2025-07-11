@@ -183,7 +183,8 @@ def handle_webhook(request):
                     includeItemsFromAllDrives=True,
                     supportsAllDrives=True
                 ).execute()
-                tag_files = tag_response.get('files', [])
+                for f in tag_response.get('files', []):
+                    print("API上のname:", f['name'])
                 if not tag_files:
                     print("タグ付け表.xlsxが見つかりません")
                     return 'OK', 200
