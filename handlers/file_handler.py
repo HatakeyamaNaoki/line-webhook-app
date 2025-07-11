@@ -11,6 +11,7 @@ drive_service = build('drive', 'v3', credentials=credentials)
 
 def get_or_create_folder(folder_name, parent_id=None):
     # 共有ドライブ直下のときは'root'指定
+    print("通ってる")
     parent_clause = "'root' in parents" if not parent_id else f"'{parent_id}' in parents"
 
     query = (
