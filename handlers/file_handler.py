@@ -10,31 +10,32 @@ credentials = service_account.Credentials.from_service_account_file(
 drive_service = build('drive', 'v3', credentials=credentials)
 
 def get_or_create_folder(folder_name, parent_id=None):
-    # 共有ドライブ直下なら親は'root'
-    parent = 'root' if parent_id is None else parent_id
+    # クエリは共有ドライブ直下またはサブフォルダを対象
+    if parent_id:
+        query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '{parent_id}' in parents"
+    else:
+        # 共有ドライブ直下を指定する場合（rootではなく、ドライブIDとcorporaをdriveで指定）
+        query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and 'root' in parents"
 
-    query = (
-        f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' "
-        f"and trashed = false and '{parent}' in parents"
-    )
     response = drive_service.files().list(
         q=query,
         fields='files(id, name)',
-        supportsAllDrives=True,
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
         includeItemsFromAllDrives=True,
-        corpora='drive',  # 共有ドライブ検索時は必須
-        driveId=SHARED_DRIVE_ID,  # 共有ドライブのID
+        supportsAllDrives=True
     ).execute()
     files = response.get('files', [])
     if files:
         return files[0]['id']
 
-    # 新規作成（親指定忘れずに）
     file_metadata = {
         'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [parent]
+        'mimeType': 'application/vnd.google-apps.folder'
     }
+    if parent_id:
+        file_metadata['parents'] = [parent_id]
+
     folder = drive_service.files().create(
         body=file_metadata,
         fields='id',
@@ -48,7 +49,14 @@ def get_unique_filename(file_name, folder_id):
     for i in range(1, 1000):
         new_name = f"{base}_{i:03d}{ext}"
         query = f"name = '{new_name}' and '{folder_id}' in parents and trashed = false"
-        res = drive_service.files().list(q=query, fields='files(id)').execute()
+        res = drive_service.files().list(
+            q=query,
+            fields='files(id)',
+            driveId=SHARED_DRIVE_ID,
+            corpora='drive',
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
+        ).execute()
         if not res.get('files'):
             return new_name
     raise Exception("Unique filename could not be determined (too many duplicates).")
@@ -60,7 +68,11 @@ def save_image_to_drive(image_data, file_name, folder_id):
         f.write(image_data)
     file_metadata = {'name': unique_name, 'parents': [folder_id]}
     media = MediaFileUpload(file_path, mimetype='image/jpeg')
-    drive_service.files().create(body=file_metadata, media_body=media).execute()
+    drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        supportsAllDrives=True
+    ).execute()
     os.remove(file_path)
 
 def save_text_to_drive(text, file_name, folder_id):
@@ -69,8 +81,6 @@ def save_text_to_drive(text, file_name, folder_id):
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(text)
     file_metadata = {'name': unique_name, 'parents': [folder_id]}
-    print("==== ファイルアップロード先のparents ====")
-    print(file_metadata.get('parents'))
     media = MediaFileUpload(file_path, mimetype='text/plain')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)

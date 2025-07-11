@@ -2,7 +2,7 @@ import pandas as pd
 import io
 from handlers.file_handler import drive_service
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from config import CSV_FORMAT_PATH
+from config import CSV_FORMAT_PATH, SHARED_DRIVE_ID 
 import pytz
 from datetime import datetime
 import unicodedata
@@ -181,14 +181,25 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     all_results = drive_service.files().list(
         q=f"name='{filename}' and trashed = false",
         fields="files(id, name, parents, owners)",
-        pageSize=10
+        pageSize=10,
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
     ).execute()
     all_files = all_results.get('files', [])
     for f in all_files:
         print(f"ファイル名: {f['name']}, ファイルID: {f['id']}, 親: {f.get('parents')}, オーナー: {f['owners'][0]['displayName'] if f.get('owners') else '-'}")
 
     query = f"name = '{filename}' and '{parent_id}' in parents and trashed = false"
-    response = drive_service.files().list(q=query, fields='files(id, name, parents, owners)').execute()
+    response = drive_service.files().list(
+        q=query,
+        fields='files(id, name, parents, owners)',
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
+    ).execute()
     files = response.get('files', [])
     print(f"【デバッグ】指定親フォルダ {parent_id} で見つかったファイル数: {len(files)}")
     for f in files:
@@ -197,7 +208,10 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     main_sheet_name = f'集計結果_{today}'
     if files:
         file_id = files[0]['id']
-        request = drive_service.files().get_media(fileId=file_id)
+        request = drive_service.files().get_media(
+            fileId=file_id,
+            supportsAllDrives=True
+        )
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -220,10 +234,18 @@ def append_to_xlsx(structured_text, parent_id, openai_client):
     try:
         media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if files:
-            drive_service.files().update(fileId=file_id, media_body=media).execute()
+            drive_service.files().update(
+                fileId=file_id,
+                media_body=media,
+                supportsAllDrives=True
+            ).execute()
         else:
             file_metadata = {'name': filename, 'parents': [parent_id]}
-            drive_service.files().create(body=file_metadata, media_body=media).execute()
+            drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                supportsAllDrives=True
+            ).execute()
         print(f"Excelファイル作成成功: {file_path}")
     except Exception as e:
         print("Excelファイル作成/アップロードエラー:", e)
@@ -406,7 +428,14 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     """
     # 1. 注文書フォーマット.xlsx取得
     fmt_query = f"name = '注文書フォーマット.xlsx' and trashed = false"
-    fmt_resp = drive_service.files().list(q=fmt_query, fields='files(id)').execute()
+    fmt_resp = drive_service.files().list(
+        q=fmt_query,
+        fields='files(id)',
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
+    ).execute()
     fmt_files = fmt_resp.get('files', [])
     if not fmt_files:
         print("注文書フォーマット.xlsxが見つかりません")
@@ -417,7 +446,14 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     filename = f'集計結果_{today_str}.xlsx'
     file_path = f"/tmp/{filename}"
     query = f"name = '{filename}' and '{csv_folder_id}' in parents and trashed = false"
-    response = drive_service.files().list(q=query, fields='files(id)').execute()
+    response = drive_service.files().list(
+        q=query,
+        fields='files(id)',
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
+    ).execute()
     files = response.get('files', [])
     if not files:
         print("集計ファイルが見つかりません")
@@ -425,7 +461,10 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
         return False
     excel_file_id = files[0]['id']
     excel_tmp_path = f"/tmp/{filename}"
-    request_dl = drive_service.files().get_media(fileId=excel_file_id)
+    request_dl = drive_service.files().get_media(
+        fileId=excel_file_id,
+        supportsAllDrives=True
+    )
     with open(excel_tmp_path, 'wb') as fh:
         downloader = MediaIoBaseDownload(fh, request_dl)
         done = False
@@ -499,7 +538,11 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
         # Driveへアップロード
         file_metadata = {'name': dest_name, 'parents': [order_folder_id]}
         media = MediaFileUpload(dest_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        drive_service.files().create(body=file_metadata, media_body=media).execute()
+        drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
         count += 1
 
     return True
@@ -556,14 +599,24 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     yesterday_folder_id = get_or_create_folder(yesterday_str, parent_id=root_id)
     csv_folder_id_yesterday = get_or_create_folder('集計結果', parent_id=yesterday_folder_id)
     prev_query = f"name = '{prev_xlsx}' and '{csv_folder_id_yesterday}' in parents and trashed = false"
-    prev_response = drive_service.files().list(q=prev_query, fields='files(id)').execute()
+    prev_response = drive_service.files().list(
+        q=prev_query,
+        fields='files(id)',
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
+    ).execute()
     prev_files = prev_response.get('files', [])
     if not prev_files:
         print("前日分の集計結果ファイルがありません")
         return False
     prev_file_id = prev_files[0]['id']
     prev_tmp_path = f"/tmp/{prev_xlsx}"
-    request_dl = drive_service.files().get_media(fileId=prev_file_id)
+    request_dl = drive_service.files().get_media(
+        fileId=prev_file_id,
+        supportsAllDrives=True
+    )
     with open(prev_tmp_path, 'wb') as fh:
         downloader = MediaIoBaseDownload(fh, request_dl)
         done = False
@@ -573,13 +626,23 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
 
     # --- 当日ファイルDL or 新規作成
     today_query = f"name = '{today_xlsx}' and '{csv_folder_id}' in parents and trashed = false"
-    today_response = drive_service.files().list(q=today_query, fields='files(id)').execute()
+    today_response = drive_service.files().list(
+        q=today_query,
+        fields='files(id)',
+        driveId=SHARED_DRIVE_ID,
+        corpora='drive',
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True
+    ).execute()
     today_files = today_response.get('files', [])
     today_tmp_path = f"/tmp/{today_xlsx}"
 
     if today_files:
         today_file_id = today_files[0]['id']
-        request_dl = drive_service.files().get_media(fileId=today_file_id)
+        request_dl = drive_service.files().get_media(
+            fileId=prev_file_id,
+            supportsAllDrives=True
+        )
         with open(today_tmp_path, 'wb') as fh:
             downloader = MediaIoBaseDownload(fh, request_dl)
             done = False
@@ -614,10 +677,18 @@ def migrate_prev_day_sheets_to_today(csv_folder_id, today_str, drive_service):
     today_wb.save(today_tmp_path)
     media = MediaFileUpload(today_tmp_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     if today_files:
-        drive_service.files().update(fileId=today_file_id, media_body=media).execute()
+        drive_service.files().update(
+            fileId=today_file_id,
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
     else:
         file_metadata = {'name': today_xlsx, 'parents': [csv_folder_id]}
-        drive_service.files().create(body=file_metadata, media_body=media).execute()
+        drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
     print("前日データ移行シートを作成・アップロード完了")
     return True
 
