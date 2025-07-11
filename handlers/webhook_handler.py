@@ -10,7 +10,7 @@ from handlers.csv_handler import (
 )
 from handlers.file_handler import get_or_create_folder, drive_service
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-from config import CSV_FORMAT_PATH, SHARED_DRIVE_ID
+from config import CSV_FORMAT_PATH, SHARED_DRIVE_ID, ORDER_SUMMARY_FOLDER_ID
 
 import os
 import pytz

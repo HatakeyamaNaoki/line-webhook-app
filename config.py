@@ -6,3 +6,4 @@ SERVICE_ACCOUNT_FILE = '/etc/secrets/credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 CSV_FORMAT_PATH = '集計フォーマット.csv'
 SHARED_DRIVE_ID = os.environ.get('GOOGLE_SHARED_DRIVE_ID', '0AGgACoeUF81eUk9PVA')
+ORDER_SUMMARY_FOLDER_ID = '15tyS6xLu203jttUZlxllyuhQbtKHrXjN'
