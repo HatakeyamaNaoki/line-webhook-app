@@ -1,6 +1,6 @@
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from config import SERVICE_ACCOUNT_FILE, SCOPES, SHARED_DRIVE_ID
+from config import SERVICE_ACCOUNT_FILE, SCOPES
 from google.oauth2 import service_account
 import os
 
@@ -9,26 +9,13 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
-# ★ここに共有ドライブ一覧取得のコードを入れる！★
-drives = drive_service.drives().list().execute()
-print("==== アクセス可能な共有ドライブ一覧 ====")
-for d in drives.get("drives", []):
-    print(d["id"], d["name"])
-
-def get_or_create_folder(folder_name, parent_id=SHARED_DRIVE_ID):
+def get_or_create_folder(folder_name, parent_id=None):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
     else:
         query += f" and 'root' in parents"
-    response = drive_service.files().list(
-        q=query,
-        fields='files(id, name)',
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-        corpora='drive',
-        driveId=SHARED_DRIVE_ID
-    ).execute()
+    response = drive_service.files().list(q=query, fields='files(id, name)').execute()
     files = response.get('files', [])
     if files:
         return files[0]['id']
@@ -44,14 +31,7 @@ def get_unique_filename(file_name, folder_id):
     for i in range(1, 1000):
         new_name = f"{base}_{i:03d}{ext}"
         query = f"name = '{new_name}' and '{folder_id}' in parents and trashed = false"
-        res = drive_service.files().list(
-            q=query,
-            fields='files(id, name)',
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-            corpora='drive',
-            driveId=SHARED_DRIVE_ID
-        ).execute()
+        res = drive_service.files().list(q=query, fields='files(id)').execute()
         if not res.get('files'):
             return new_name
     raise Exception("Unique filename could not be determined (too many duplicates).")
