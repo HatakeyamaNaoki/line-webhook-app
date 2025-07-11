@@ -11,14 +11,13 @@ drive_service = build('drive', 'v3', credentials=credentials)
 
 def get_or_create_folder(folder_name, parent_id=None):
     # 共有ドライブ直下のときは'root'指定
-    print("通ってる")
     parent_clause = "'root' in parents" if not parent_id else f"'{parent_id}' in parents"
 
     query = (
         f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' "
         f"and trashed = false and {parent_clause}"
     )
-
+    print(f"[DEBUG] クエリ: {query}")
     response = drive_service.files().list(
         q=query,
         fields='files(id, name)',
