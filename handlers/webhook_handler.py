@@ -59,6 +59,8 @@ def handle_webhook(request):
             df_empty.to_excel(file_path, index=False)
             media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             file_metadata = {'name': filename, 'parents': [csv_folder_id]}
+            print("==== ファイルアップロード先のparents ====")
+            print(file_metadata.get('parents'))
             drive_service.files().create(
                 body=file_metadata, media_body=media, fields='id'
             ).execute()
