@@ -66,6 +66,8 @@ def save_text_to_drive(text, file_name, folder_id):
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(text)
     file_metadata = {'name': unique_name, 'parents': [folder_id]}
+    print("==== ファイルアップロード先のparents ====")
+    print(file_metadata.get('parents'))
     media = MediaFileUpload(file_path, mimetype='text/plain')
     drive_service.files().create(body=file_metadata, media_body=media).execute()
     os.remove(file_path)
