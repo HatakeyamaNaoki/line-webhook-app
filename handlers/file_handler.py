@@ -15,7 +15,14 @@ def get_or_create_folder(folder_name, parent_id=SHARED_DRIVE_ID):
         query += f" and '{parent_id}' in parents"
     else:
         query += f" and 'root' in parents"
-    response = drive_service.files().list(q=query, fields='files(id, name)').execute()
+    response = drive_service.files().list(
+        q=query,
+        fields='files(id, name)',
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+        corpora='drive',
+        driveId=SHARED_DRIVE_ID
+    ).execute()
     files = response.get('files', [])
     if files:
         return files[0]['id']
@@ -31,7 +38,14 @@ def get_unique_filename(file_name, folder_id):
     for i in range(1, 1000):
         new_name = f"{base}_{i:03d}{ext}"
         query = f"name = '{new_name}' and '{folder_id}' in parents and trashed = false"
-        res = drive_service.files().list(q=query, fields='files(id)').execute()
+        res = drive_service.files().list(
+            q=query,
+            fields='files(id, name)',
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            corpora='drive',
+            driveId=SHARED_DRIVE_ID
+        ).execute()
         if not res.get('files'):
             return new_name
     raise Exception("Unique filename could not be determined (too many duplicates).")
