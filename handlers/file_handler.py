@@ -1,6 +1,6 @@
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from config import SERVICE_ACCOUNT_FILE, SCOPES
+from config import SERVICE_ACCOUNT_FILE, SCOPES, SHARED_DRIVE_ID
 from google.oauth2 import service_account
 import os
 
@@ -9,7 +9,7 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
-def get_or_create_folder(folder_name, parent_id=None):
+def get_or_create_folder(folder_name, parent_id=SHARED_DRIVE_ID):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
