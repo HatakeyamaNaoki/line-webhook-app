@@ -9,13 +9,11 @@ credentials = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=credentials)
 
-try:
-    about = drive_service.about().get(fields="user,kind").execute()
-    print("==== 認証成功！ユーザー情報 ====")
-    print(about)
-except Exception as e:
-    print("==== 認証エラー ====")
-    print(e)
+# ★ここに共有ドライブ一覧取得のコードを入れる！★
+drives = drive_service.drives().list().execute()
+print("==== アクセス可能な共有ドライブ一覧 ====")
+for d in drives.get("drives", []):
+    print(d["id"], d["name"])
 
 def get_or_create_folder(folder_name, parent_id=SHARED_DRIVE_ID):
     query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
