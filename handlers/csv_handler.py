@@ -441,7 +441,7 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     fmt_resp = drive_service.files().list(
         q=fmt_query,
         fields='files(id)',
-        driveId=SHARED_DRIVE_ID,
+        driveId=os.getenv("SHARED_DRIVE_ID"),
         corpora='drive',
         includeItemsFromAllDrives=True,
         supportsAllDrives=True
@@ -459,7 +459,7 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     response = drive_service.files().list(
         q=query,
         fields='files(id)',
-        driveId=SHARED_DRIVE_ID,
+        driveId=os.getenv("SHARED_DRIVE_ID"),
         corpora='drive',
         includeItemsFromAllDrives=True,
         supportsAllDrives=True
@@ -481,7 +481,6 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
         while not done:
             status, done = downloader.next_chunk()
 
-    from openpyxl import load_workbook
     wb = load_workbook(excel_tmp_path)
     if "注文リスト" not in wb.sheetnames:
         print("注文リストシートがありません")
@@ -518,28 +517,38 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
         wbo = load_workbook(dest_path)
         ws = wbo.active
 
-        # B6, B7, B8, P4, B15
-        ws["B6"] = g.iloc[0]["発注先"]
-        ws["B7"] = g.iloc[0]["郵便番号"]
-        ws["B8"] = g.iloc[0]["住所"]
-        ws["P4"] = pd.Timestamp.today().strftime("%Y/%m/%d")
+        # B6, B7, B8, P4, B15（B15: 備考など）に書き込む場合はMergedCell判定
+        def safe_set(ws, cell_addr, value):
+            cell = ws[cell_addr]
+            if not isinstance(cell, MergedCell):
+                cell.value = value
+
+        safe_set(ws, "B6", g.iloc[0]["発注先"])
+        safe_set(ws, "B7", g.iloc[0]["郵便番号"])
+        safe_set(ws, "B8", g.iloc[0]["住所"])
+        safe_set(ws, "P4", pd.Timestamp.today().strftime("%Y/%m/%d"))
 
         # 商品行ループ
         for i, (_, row) in enumerate(g.iterrows()):
             row_idx = 20 + i  # 20~34
-            ws[f"B{row_idx}"] = row["商品名"]
-            # 消費税欄がなければK列は空欄
+            def set_safe(col, value):
+                addr = f"{col}{row_idx}"
+                cell = ws[addr]
+                if not isinstance(cell, MergedCell):
+                    cell.value = value
+
+            set_safe("B", row["商品名"])
             if "消費税" in g.columns:
-                ws[f"K{row_idx}"] = "※" if str(row.get("消費税", "")).strip() == "10%" else ""
-            ws[f"L{row_idx}"] = row["数量"]
-            ws[f"M{row_idx}"] = row["単位"]
-            ws[f"F{row_idx}"] = row["サイズ"]
+                set_safe("K", "※" if str(row.get("消費税", "")).strip() == "10%" else "")
+            set_safe("L", row["数量"])
+            set_safe("M", row["単位"])
+            set_safe("F", row["サイズ"])
             orig = row["納品希望日"]
             if isinstance(orig, str) and len(orig) == 8 and orig.isdigit():
                 dt = datetime.strptime(orig, "%Y%m%d")
-                ws[f"H{row_idx}"] = dt.strftime("%Y/%m/%d")
+                set_safe("H", dt.strftime("%Y/%m/%d"))
             else:
-                ws[f"H{row_idx}"] = orig  # フォーマット外ならそのまま
+                set_safe("H", orig)
             if row_idx >= 34:
                 break
 
