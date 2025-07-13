@@ -338,11 +338,10 @@ def handle_webhook(request):
     elif message_type == 'file':
         file_name = event['message'].get('fileName', '').lower()
         file_id = event['message'].get('fileId')
-        print("通ってる。")
-        print(file_name)
+        print("file_name repr:", repr(file_name))
 
         # タグ付け表.xlsxの場合はGoogleドライブ受注集計直下にアップロード
-        if file_name == 'タグ付け表.xlsx':
+        if file_name.strip() == 'タグ付け表.xlsx':
             temp_path = f"/tmp/{file_name}"
             CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
             headers = {"Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"}
