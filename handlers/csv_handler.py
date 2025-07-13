@@ -459,7 +459,7 @@ def create_order_sheets(date_id, csv_folder_id, today_str, drive_service):
     response = drive_service.files().list(
         q=query,
         fields='files(id)',
-        driveId=os.getenv("SHARED_DRIVE_ID"),
+        driveId=SHARED_DRIVE_ID,
         corpora='drive',
         includeItemsFromAllDrives=True,
         supportsAllDrives=True
