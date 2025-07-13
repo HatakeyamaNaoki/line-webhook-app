@@ -186,6 +186,7 @@ def handle_webhook(request):
                     includeItemsFromAllDrives=True,
                     supportsAllDrives=True
                 ).execute()
+                print("通ってる")
                 for f in results.get('files', []):
                     print(f"見えるファイル名: {f['name']}, 所有者: {f['owners']}")
                 # =========================================
