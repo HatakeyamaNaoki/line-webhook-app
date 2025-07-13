@@ -173,23 +173,29 @@ def handle_webhook(request):
         if user_text == '発注リスト作成':
             try:
                 tag_xlsx_path = f"/tmp/タグ付け表.xlsx"
-                tag_name = "タグ付け表.xlsx"
-                tag_query = f"name = '{tag_name}' and '{root_id}' in parents and trashed = false"
-                print(f"[DEBUG] tag_query: {tag_query}")
-                tag_response = drive_service.files().list(
-                    q=tag_query,
-                    fields='files(id, name)',
+                # 「親フォルダ直下の全ファイル」一括取得
+                files = drive_service.files().list(
+                    q=f"'{root_id}' in parents and trashed = false",
+                    fields="files(id, name)",
                     driveId=SHARED_DRIVE_ID,
                     corpora='drive',
                     includeItemsFromAllDrives=True,
                     supportsAllDrives=True
-                ).execute()
-                tag_files = tag_response.get('files', [])
-                print("tag_files:", tag_files)
-                if not tag_files:
+                ).execute().get('files', [])
+                
+                # Python側で正規化比較
+                target_name = unicodedata.normalize('NFC', 'タグ付け表.xlsx')
+                tag_file_id = None
+                for f in files:
+                    f_name = unicodedata.normalize('NFC', f['name'])
+                    if f_name == target_name:
+                        tag_file_id = f['id']
+                        break
+
+                if not tag_file_id:
                     print("タグ付け表.xlsxが見つかりません")
                     return 'OK', 200
-                tag_file_id = tag_files[0]['id']
+
                 tag_dl = drive_service.files().get_media(fileId=tag_file_id)
                 with open(tag_xlsx_path, 'wb') as ftag:
                     downloader = MediaIoBaseDownload(ftag, tag_dl)
