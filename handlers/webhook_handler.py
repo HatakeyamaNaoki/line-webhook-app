@@ -180,7 +180,7 @@ def handle_webhook(request):
                 # ======★ここに一時的に追加して実行！======
                 results = drive_service.files().list(
                     q=f"'{root_id}' in parents and trashed = false",
-                    fields="files(id, name, owners)",
+                    fields="files(id, name)",
                     driveId=SHARED_DRIVE_ID,
                     corpora='drive',
                     includeItemsFromAllDrives=True,
@@ -188,7 +188,7 @@ def handle_webhook(request):
                 ).execute()
                 print("通ってる")
                 for f in results.get('files', []):
-                    print(f"見えるファイル名: {f['name']}, 所有者: {f['owners']}")
+                    print(f"見えるファイル名: {f['name']}")
                 # =========================================
 
                 tag_response = drive_service.files().list(
