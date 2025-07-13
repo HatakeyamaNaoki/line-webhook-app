@@ -173,24 +173,9 @@ def handle_webhook(request):
         if user_text == '発注リスト作成':
             try:
                 tag_xlsx_path = f"/tmp/タグ付け表.xlsx"
-                print(f"[DEBUG] root_id: {root_id}")
-                tag_query = f"name = 'タグ付け表.xlsx' and '{root_id}' in parents and trashed = false"
+                tag_name = unicodedata.normalize('NFC', 'タグ付け表.xlsx')
+                tag_query = f"name = '{tag_name}' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
-
-                # ======★ここに一時的に追加して実行！======
-                results = drive_service.files().list(
-                    q=f"'{root_id}' in parents and trashed = false",
-                    fields="files(id, name)",
-                    driveId=SHARED_DRIVE_ID,
-                    corpora='drive',
-                    includeItemsFromAllDrives=True,
-                    supportsAllDrives=True
-                ).execute()
-                print("通ってる")
-                for f in results.get('files', []):
-                    print(f"見えるファイル名: {f['name']}")
-                # =========================================
-
                 tag_response = drive_service.files().list(
                     q=tag_query,
                     fields='files(id)',
