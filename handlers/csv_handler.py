@@ -15,6 +15,7 @@ import re
 import shutil
 from handlers.file_handler import get_or_create_folder
 from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import MergedCell
 
 CSV_HEADERS = pd.read_csv(CSV_FORMAT_PATH, encoding='utf-8').columns.tolist()
 JST = pytz.timezone('Asia/Tokyo')
@@ -349,9 +350,6 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     「集計結果サマリ」→「注文リスト」シートを作成
     備考と発注先の間に税率（タグ付け表由来）を追加
     """
-    import pandas as pd
-    from openpyxl import load_workbook
-
     # 必要なヘッダーに「税率」を追加
     order_headers = ["商品名", "サイズ", "数量", "単位", "納品希望日", "備考", "税率", "発注先", "郵便番号", "住所"]
 
@@ -412,12 +410,24 @@ def create_order_list_sheet(xlsx_path, tag_xlsx_path):
     # 既存シート削除
     if "注文リスト" in wb.sheetnames:
         del wb["注文リスト"]
+
     ws_order = wb.create_sheet("注文リスト")
     ws_order.append(order_headers)
     for r in order_list:
         ws_order.append(list(r))
+
+    # セル値を書き換えるときはMergedCellを絶対に触らない
     for ws in wb.worksheets:
-        autofit_columns(ws)
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell, MergedCell):
+                    continue  # 結合セルは触らない
+
+    # 必要に応じて列幅自動調整（関数化している場合はそのまま）
+    for ws in wb.worksheets:
+        if 'autofit_columns' in globals():
+            autofit_columns(ws)
+
     wb.save(xlsx_path)
     return True
 
