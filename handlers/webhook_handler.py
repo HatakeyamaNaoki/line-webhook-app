@@ -178,7 +178,7 @@ def handle_webhook(request):
                 print(f"[DEBUG] tag_query: {tag_query}")
                 tag_response = drive_service.files().list(
                     q=tag_query,
-                    fields='files(id)',
+                    fields='files(id, name)',
                     driveId=SHARED_DRIVE_ID,
                     corpora='drive',
                     includeItemsFromAllDrives=True,
