@@ -176,6 +176,20 @@ def handle_webhook(request):
                 print(f"[DEBUG] root_id: {root_id}")
                 tag_query = f"name = 'タグ付け表.xlsx' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
+
+                # ======★ここに一時的に追加して実行！======
+                results = drive_service.files().list(
+                    q=f"'{root_id}' in parents and trashed = false",
+                    fields="files(id, name, owners)",
+                    driveId=SHARED_DRIVE_ID,
+                    corpora='drive',
+                    includeItemsFromAllDrives=True,
+                    supportsAllDrives=True
+                ).execute()
+                for f in results.get('files', []):
+                    print(f"見えるファイル名: {f['name']}, 所有者: {f['owners']}")
+                # =========================================
+
                 tag_response = drive_service.files().list(
                     q=tag_query,
                     fields='files(id)',
