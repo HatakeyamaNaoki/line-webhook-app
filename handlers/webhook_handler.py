@@ -173,7 +173,7 @@ def handle_webhook(request):
         if user_text == '発注リスト作成':
             try:
                 tag_xlsx_path = f"/tmp/タグ付け表.xlsx"
-                tag_name = unicodedata.normalize('NFC', 'タグ付け表.xlsx')
+                tag_name = "タグ付け表.xlsx"
                 tag_query = f"name = '{tag_name}' and '{root_id}' in parents and trashed = false"
                 print(f"[DEBUG] tag_query: {tag_query}")
                 tag_response = drive_service.files().list(
@@ -185,6 +185,7 @@ def handle_webhook(request):
                     supportsAllDrives=True
                 ).execute()
                 tag_files = tag_response.get('files', [])
+                print("tag_files:", tag_files)
                 if not tag_files:
                     print("タグ付け表.xlsxが見つかりません")
                     return 'OK', 200
